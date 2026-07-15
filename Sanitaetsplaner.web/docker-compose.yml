@@ -13,13 +13,14 @@ services:
     environment:
       DATABASE_URL: "file:/app/data/sanitaetsplaner.db"
       NODE_ENV: production
-      # values so `docker compose up` works without a .env file.
-      # These are NOT secret and NOT secure — anyone with this repo knows them.
-      # For a real deployment, override via .env (see .env.example) with your
-      # own generated AUTH_SECRET / ENCRYPTION_KEY and the correct AUTH_URL.
-      AUTH_SECRET: ${AUTH_SECRET:-INSECURE-DEFAULT-CHANGE-ME-min-32-characters-long}
+      # `docker compose up` works without a .env file: when AUTH_SECRET /
+      # ENCRYPTION_KEY are not provided, the container generates random ones
+      # on first start and persists them in the data volume (./data). To use
+      # your own values, set them via .env (see .env.example) — explicitly
+      # configured values always take precedence over generated ones.
+      AUTH_SECRET: ${AUTH_SECRET:-}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-INSECURE-DEFAULT-CHANGE-ME-not-a-real-key}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/auth/session"]
       interval: 30s

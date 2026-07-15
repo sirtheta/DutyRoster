@@ -18,5 +18,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     role: UserRole;
+    /** Epoch ms of the last DB re-check of role/isActive (see jwt callback). */
+    roleCheckedAt?: number;
   }
 }

@@ -10,6 +10,24 @@ The application has a solid security baseline: role-gated server actions, bcrypt
 
 The most important issues are: (1) the shipped docker-compose fallback secrets pass production validation, so a deployment without a `.env` runs with a publicly known JWT signing key; (2) full Prisma `User` rows — including bcrypt password hashes and iCal tokens — are serialized to the browser on the admin users page; and (3) role changes and deactivation do not take effect until the JWT expires (up to 8 hours).
 
+## Remediation status (2026-07-15)
+
+All findings were remediated on this branch:
+
+| Finding | Status | Fix |
+|---|---|---|
+| H1 default secrets | **Fixed** | docker-compose no longer ships fallback secrets. When `AUTH_SECRET`/`ENCRYPTION_KEY` are unset, `scripts/startup.js` generates random ones on first start and persists them in the data volume (`data/secrets.json`, mode 600); the entrypoint sources them before the server starts, so `docker compose up` still works without a `.env`. `lib/env.ts` additionally rejects the known placeholder values and enforces a minimum `ENCRYPTION_KEY` length. |
+| M1 `passwordHash` in RSC payload | **Fixed** | `/users` query uses an explicit `select`; client components take a narrowed `UserListItem` type without `passwordHash`/`icalToken`. |
+| M2 stale JWT privileges | **Fixed** | The `jwt` callback re-checks `role`/`isActive` in the DB at most every 60 s and invalidates the session for missing/deactivated users. |
+| M3 iCal token | **Fixed** | New tokens are `crypto.randomBytes(32)` (base64url); users can rotate their token from the dashboard ("Link neu generieren"); failed token lookups are rate-limited per IP (successful feeds are never throttled). |
+| M4 rate limiter | **Fixed** | Bucket map is capped (expired-entry sweep + hard cap of 10 000), rate-limit key uses the normalized email, and a wider per-IP login bucket (10× the per-account limit) throttles account spraying. |
+| L1 ciphertext to client | **Fixed** | Settings page selects only the four displayed fields. |
+| L2 plaintext passthrough | **Fixed** | `decryptSecret` logs a warning when it encounters an unencrypted stored secret (re-saving encrypts it). |
+| L3 password in logs | **Fixed** | The generated bootstrap password is written to `data/initial-admin-password.txt` (mode 600) instead of the container logs. |
+| L4 Host-header URL | **Fixed** | The iCal URL prefers `AUTH_URL`; the Host header is only a fallback. |
+| L5 unvalidated action inputs | **Fixed** | All calendar/holiday server-action inputs are zod-validated (real calendar dates, comment ≤ 500 chars, bounded batch sizes, year range, canton format). |
+| L6 dependency posture | **Partially addressed** | Dependabot was already configured (missed in the original review). `next-auth` remains on the v5 beta — switch to stable when released. |
+
 ---
 
 ## High

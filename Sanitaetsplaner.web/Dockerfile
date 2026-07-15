@@ -71,4 +71,7 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget -qO- http://localhost:3000/api/auth/session > /dev/null || exit 1
 
-CMD ["sh", "-c", "node /app/scripts/startup.js && exec node /app/server.js"]
+# startup.js may generate AUTH_SECRET/ENCRYPTION_KEY into <data>/secrets.env
+# (only the values not already provided via environment); source them so the
+# server process sees them.
+CMD ["sh", "-c", "set -e; node /app/scripts/startup.js; set -a; [ ! -f /app/data/secrets.env ] || . /app/data/secrets.env; set +a; exec node /app/server.js"]

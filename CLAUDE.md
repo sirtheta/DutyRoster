@@ -73,7 +73,7 @@ npx vitest run tests/unit/rotation.test.ts
 
 **Encrypted settings**: SMTP password and Telegram bot token are AES-encrypted at rest in `SystemSettings` via `lib/crypto.ts`, using the `ENCRYPTION_KEY` env var.
 
-**iCal feed** (`app/api/ical/[token]/route.ts`): Per-user, token-authenticated (`User.icalToken`, stable/immutable) `.ics` feed of `F` and `S` entries — no session required, just the token.
+**iCal feed** (`app/api/ical/[token]/route.ts`): Per-user, token-authenticated (`User.icalToken`, 32 random bytes, rotatable from the dashboard) `.ics` feed of `F` and `S` entries — no session required, just the token. Failed token lookups are rate-limited per IP.
 
 **Audit logging** (`lib/audit.ts`): `logAudit(session, action, entityType, entityId, details)` writes to `AuditLog`; failures are logged but never thrown, so a broken audit trail never blocks the underlying mutation.
 
@@ -84,9 +84,9 @@ npx vitest run tests/unit/rotation.test.ts
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | No | SQLite path, defaults to `file:./data/sanitaetsplaner.db` |
-| `AUTH_SECRET` | Production only | NextAuth JWT signing key (min 32 chars) |
+| `AUTH_SECRET` | Production only | NextAuth JWT signing key (min 32 chars); in Docker auto-generated on first start and persisted in the data volume if unset |
 | `AUTH_URL` | Production only | Full URL for auth redirects |
-| `ENCRYPTION_KEY` | Production only | 32-byte hex key for encrypting SMTP/Telegram secrets at rest |
+| `ENCRYPTION_KEY` | Production only | 32-byte hex key for encrypting SMTP/Telegram secrets at rest; in Docker auto-generated on first start and persisted in the data volume if unset |
 | `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_PASSWORD` | First run | Bootstraps the initial admin user |
 | `ADMIN_PASSWORD_HASH` | First run | Pre-hashed bcrypt alternative to `ADMIN_PASSWORD` |
 | `DEFAULT_CANTON` | No | ISO canton code for `date-holidays` seeding, defaults to `BE` |

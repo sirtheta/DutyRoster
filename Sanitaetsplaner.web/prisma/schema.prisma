@@ -36,7 +36,9 @@ model User {
   notifyHour     Int           @default(7) // hour (0-23) local Europe/Zurich
   telegramChatId String?
 
-  // Stable, immutable token for the personal iCal feed
+  // Bearer token for the personal iCal feed. Created as 32 random bytes
+  // (base64url) in the app; the cuid() default is only a fallback for rows
+  // created outside it. Rotatable via the dashboard ("Link neu generieren").
   icalToken String @unique @default(cuid())
 
   createdAt DateTime @default(now())

@@ -9,13 +9,61 @@ const bcrypt = require('bcryptjs');
 
 const dbPath = (process.env.DATABASE_URL ?? 'file:/app/data/sanitaetsplaner.db')
   .replace(/^file:/, '');
+const dataDir = path.dirname(dbPath);
+
+ensureSecrets(dataDir);
 
 const db = new Database(dbPath);
 try {
   applyMigrations(db);
-  seedAdminUser(db);
+  seedAdminUser(db, dataDir);
 } finally {
   db.close();
+}
+
+// ── Auto-generate AUTH_SECRET / ENCRYPTION_KEY if not provided ───────────────
+// Allows `docker compose up` without a .env file: instead of shipping known
+// default secrets, each installation gets its own random ones, persisted in
+// the data volume so sessions and encrypted settings survive restarts.
+// Generated values are written to secrets.env, which the container entrypoint
+// sources before starting the server. Env-provided values always win: they
+// are never overwritten here and secrets.env only contains the missing ones.
+function ensureSecrets(dir) {
+  const storePath = path.join(dir, 'secrets.json');
+  const envPath = path.join(dir, 'secrets.env');
+
+  let store = {};
+  if (fs.existsSync(storePath)) {
+    try {
+      store = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+    } catch {
+      console.warn('[startup] Could not parse secrets.json — regenerating missing secrets.');
+    }
+  }
+
+  const generators = {
+    AUTH_SECRET: () => crypto.randomBytes(48).toString('base64'),
+    ENCRYPTION_KEY: () => crypto.randomBytes(32).toString('hex'),
+  };
+
+  let storeChanged = false;
+  const lines = [];
+  for (const [name, generate] of Object.entries(generators)) {
+    if (process.env[name]) continue; // explicitly configured — never override
+    if (!store[name]) {
+      store[name] = generate();
+      storeChanged = true;
+      console.log(`[startup] ${name} not set — generated and persisted in the data volume.`);
+    }
+    process.env[name] = store[name];
+    lines.push(`${name}='${store[name]}'`);
+  }
+
+  if (storeChanged) {
+    fs.writeFileSync(storePath, JSON.stringify(store, null, 2) + '\n', { mode: 0o600 });
+  }
+  // Rewritten every boot so values later provided via env drop out of the file.
+  fs.writeFileSync(envPath, lines.join('\n') + (lines.length ? '\n' : ''), { mode: 0o600 });
 }
 
 // ── Apply pending Prisma migrations ──────────────────────────────────────────
@@ -77,7 +125,7 @@ function applyMigrations(db) {
 }
 
 // ── Seed admin user if no users exist ────────────────────────────────────────
-function seedAdminUser(db) {
+function seedAdminUser(db, dataDir) {
   try {
     const { count } = db.prepare('SELECT COUNT(*) as count FROM "User"').get();
     if (count === 0) {
@@ -90,13 +138,17 @@ function seedAdminUser(db) {
           console.log('[startup] No ADMIN_PASSWORD_HASH set — hashed ADMIN_PASSWORD.');
         } else {
           pw = crypto.randomBytes(12).toString('base64url');
-          console.log(`[startup] No ADMIN_PASSWORD(_HASH) set — generated one-time admin password: ${pw}`);
-          console.log('[startup] Log in with this password and change it immediately.');
+          // Written to a file instead of the console so the one-time password
+          // doesn't end up in aggregated/retained container logs.
+          const pwPath = path.join(dataDir, 'initial-admin-password.txt');
+          fs.writeFileSync(pwPath, `${pw}\n`, { mode: 0o600 });
+          console.log(`[startup] No ADMIN_PASSWORD(_HASH) set — one-time admin password written to ${pwPath}`);
+          console.log('[startup] Log in with it, change it immediately, then delete the file.');
         }
         hash = bcrypt.hashSync(pw, 10);
       }
       const now = new Date().toISOString();
-      const icalToken = crypto.randomUUID();
+      const icalToken = crypto.randomBytes(32).toString('base64url');
       db.prepare(
         `INSERT INTO "User"
            (email, name, passwordHash, role, isActive, rotationOrder,
@@ -108,7 +160,7 @@ function seedAdminUser(db) {
     }
 
     db.prepare(
-      `INSERT OR IGNORE INTO "SystemSettings" (id, rotationBlockSize, defaultCanton, updatedAt) VALUES (1, 5, ?, ?)`
+      `INSERT OR IGNORE INTO "SystemSettings" (id, defaultCanton, updatedAt) VALUES (1, ?, ?)`
     ).run(process.env.DEFAULT_CANTON ?? 'ZH', new Date().toISOString());
   } catch (err) {
     console.error('[startup] Admin seeding failed:', err.message);

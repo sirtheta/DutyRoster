@@ -8,7 +8,24 @@ import { Button } from "@/components/ui/button";
 
 export default async function UsersPage() {
   await requireAdmin();
-  const users = await prisma.user.findMany({ orderBy: { rotationOrder: "asc" } });
+  // Explicit select: the rows are passed to client components and serialized
+  // to the browser — passwordHash/icalToken must never be part of that payload.
+  const users = await prisma.user.findMany({
+    orderBy: { rotationOrder: "asc" },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      isActive: true,
+      rotationOrder: true,
+      notifyEnabled: true,
+      notifyChannel: true,
+      notifyWeekday: true,
+      notifyHour: true,
+      telegramChatId: true,
+    },
+  });
 
   return (
     <div className="flex flex-col gap-4">
