@@ -11,7 +11,6 @@ import { addDays } from "@/lib/date";
 const holidaySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   name: z.string().min(1),
-  canton: z.string().optional(),
 });
 
 export async function createHolidayAction(
@@ -22,7 +21,6 @@ export async function createHolidayAction(
   const parsed = holidaySchema.safeParse({
     date: formData.get("date"),
     name: formData.get("name"),
-    canton: formData.get("canton") || undefined,
   });
   if (!parsed.success) return { error: "Ungültige Eingabe." };
 
@@ -32,7 +30,7 @@ export async function createHolidayAction(
     });
     await logAudit(session, "CREATE", "Holiday", holiday.id, parsed.data);
   } catch {
-    return { error: "Dieser Feiertag existiert bereits für diesen Kanton." };
+    return { error: "Dieser Feiertag existiert bereits." };
   }
 
   revalidatePath("/holidays");

@@ -13,7 +13,6 @@ const settingsSchema = z.object({
   smtpUser: z.string().optional(),
   smtpFromName: z.string().optional(),
   telegramBotToken: z.string().optional(),
-  defaultCanton: z.string().min(2).max(2).default("BE"),
 });
 
 export async function updateSettingsAction(
@@ -27,7 +26,6 @@ export async function updateSettingsAction(
     smtpUser: formData.get("smtpUser") || undefined,
     smtpFromName: formData.get("smtpFromName") || undefined,
     telegramBotToken: formData.get("telegramBotToken") || undefined,
-    defaultCanton: formData.get("defaultCanton"),
   });
   if (!parsed.success) return { error: "Ungültige Eingabe." };
 

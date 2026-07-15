@@ -25,10 +25,6 @@ export function HolidayForm() {
             <Label htmlFor="name">Name</Label>
             <Input id="name" name="name" required />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="canton">Kanton (optional)</Label>
-            <Input id="canton" name="canton" placeholder="z.B. ZH" maxLength={2} />
-          </div>
           {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
           <Button type="submit" disabled={pending} size="sm">
             {pending ? "Speichern…" : "Hinzufügen"}

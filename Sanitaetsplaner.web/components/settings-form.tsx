@@ -20,21 +20,6 @@ export function SettingsForm({ settings }: { settings: SystemSettings | null }) 
     <form action={formAction} className="flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Automatik</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2 max-w-xs">
-          <Label htmlFor="defaultCanton">Standard-Kanton (Feiertage)</Label>
-          <Input
-            id="defaultCanton"
-            name="defaultCanton"
-            maxLength={2}
-            defaultValue={settings?.defaultCanton ?? "BE"}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle className="text-base">SMTP (E-Mail-Versand)</CardTitle>
           <CardDescription>Wird für Benachrichtigungen verwendet.</CardDescription>
         </CardHeader>
