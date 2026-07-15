@@ -19,6 +19,12 @@ export function toDateString(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+/** Format a `YYYY-MM-DD` string as Swiss-standard `DD.MM.YYYY`. */
+export function formatDateCH(str: string): string {
+  const [y, m, d] = str.split("-");
+  return `${d}.${m}.${y}`;
+}
+
 /** Add `days` to a `YYYY-MM-DD` string, returning a `YYYY-MM-DD` string. */
 export function addDays(str: string, days: number): string {
   const d = parseDate(str);

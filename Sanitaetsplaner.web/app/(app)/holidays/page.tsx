@@ -6,6 +6,7 @@ import { HolidayRangeForm } from "@/components/holiday-range-form";
 import { HolidayImportForm } from "@/components/holiday-import-form";
 import { HolidayDeleteButton } from "@/components/holiday-delete-button";
 import { groupConsecutiveHolidays } from "@/lib/holidays";
+import { formatDateCH } from "@/lib/date";
 
 export default async function HolidaysPage() {
   const session = await requireSession();
@@ -35,16 +36,18 @@ export default async function HolidaysPage() {
           <TableRow>
             <TableHead>Datum</TableHead>
             <TableHead>Name</TableHead>
-            <TableHead>Kanton</TableHead>
             {isAdmin && <TableHead />}
           </TableRow>
         </TableHeader>
         <TableBody>
           {groups.map((g) => (
             <TableRow key={g.ids[0]}>
-              <TableCell>{g.from === g.to ? g.from : `${g.from} – ${g.to}`}</TableCell>
+              <TableCell>
+                {g.from === g.to
+                  ? formatDateCH(g.from)
+                  : `${formatDateCH(g.from)} – ${formatDateCH(g.to)}`}
+              </TableCell>
               <TableCell>{g.name}</TableCell>
-              <TableCell>{g.canton ?? "—"}</TableCell>
               {isAdmin && (
                 <TableCell className="text-right">
                   <HolidayDeleteButton id={g.ids.length === 1 ? g.ids[0] : g.ids} />
