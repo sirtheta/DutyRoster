@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/permissions";
 import { NavLinks } from "@/components/nav-links";
+import { MobileNav } from "@/components/mobile-nav";
 import { UserMenu } from "@/components/user-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -9,9 +10,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between border-b px-4 py-2">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2 md:gap-6">
+          <MobileNav role={session.user.role} />
           <span className="font-semibold">Sanitätsplaner</span>
-          <NavLinks role={session.user.role} />
+          <div className="hidden md:block">
+            <NavLinks role={session.user.role} />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />

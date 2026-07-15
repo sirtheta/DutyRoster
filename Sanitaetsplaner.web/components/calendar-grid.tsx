@@ -58,6 +58,7 @@ export function CalendarGrid({
   const [dragSource, setDragSource] = useState<Cell | null>(null);
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const gridRef = useRef<HTMLDivElement>(null);
+  const mobileGridRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   const entryMap = useMemo(() => {
@@ -118,7 +119,12 @@ export function CalendarGrid({
   useEffect(() => {
     function handleDocMouseDown(e: MouseEvent) {
       const target = e.target as Node;
-      if (gridRef.current?.contains(target) || toolbarRef.current?.contains(target)) return;
+      if (
+        gridRef.current?.contains(target) ||
+        mobileGridRef.current?.contains(target) ||
+        toolbarRef.current?.contains(target)
+      )
+        return;
       clearSelection();
     }
     document.addEventListener("mousedown", handleDocMouseDown);
@@ -167,6 +173,55 @@ export function CalendarGrid({
     [selection]
   );
 
+  function renderDateHeaderCell(d: string, keyPrefix: string) {
+    const weekend = isWeekend(d);
+    return (
+      <th
+        key={`${keyPrefix}-${d}`}
+        className={cn(
+          "min-w-[1.75rem] border-b border-l p-1 text-center font-normal text-muted-foreground",
+          (holidayNameByDate[d] || weekend) && "bg-muted"
+        )}
+        title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
+      >
+        {parseInt(d.slice(8, 10), 10)}
+      </th>
+    );
+  }
+
+  function renderDataCell(u: UserRow, d: string) {
+    const entry = entryMap.get(`${u.id}-${d}`);
+    const info = entry ? TYPE_INFO[entry.type] : undefined;
+    const isHoliday = !!holidayNameByDate[d];
+    const weekend = isWeekend(d);
+    const editable = canEdit(u.id);
+    const draggable = editable && entry?.type === "S";
+    const selected = selection.has(cellKey(u.id, d));
+    return (
+      <td
+        key={d}
+        className={cn(
+          "h-7 min-w-[1.75rem] border-b border-l p-0 text-center align-middle",
+          (isHoliday || weekend) && !entry && "bg-muted",
+          editable && "cursor-pointer hover:opacity-80",
+          // Layered white/black inset shadow instead of a colored ring so the
+          // selection stays visible no matter the cell's own background color
+          // (a colored ring disappears against a same-hued entry like "S").
+          selected && "shadow-[inset_0_0_0_2px_#fff,inset_0_0_0_4px_#0f172a]"
+        )}
+        style={info ? { backgroundColor: info.color, color: info.textColor ?? "#fff" } : undefined}
+        title={entry?.comment ?? holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
+        draggable={draggable}
+        onDragStart={() => draggable && setDragSource({ userId: u.id, date: d })}
+        onDragOver={(e) => editable && e.preventDefault()}
+        onDrop={() => editable && handleDrop(u.id, d)}
+        onClick={() => handleCellClick(u.id, d)}
+      >
+        {entry?.type ?? ""}
+      </td>
+    );
+  }
+
   return (
     <>
       {selection.size > 0 && (
@@ -194,7 +249,8 @@ export function CalendarGrid({
         </div>
       )}
 
-      <div ref={gridRef} className="overflow-x-auto rounded-md border">
+      {/* Desktop: full year in one scrollable table. */}
+      <div ref={gridRef} className="hidden overflow-x-auto rounded-md border md:block">
         <table className="border-collapse text-xs">
           <thead>
             <tr>
@@ -237,42 +293,44 @@ export function CalendarGrid({
                 <td className="sticky left-0 z-10 border-b bg-background p-2 font-medium whitespace-nowrap">
                   {u.name}
                 </td>
-                {dates.map((d) => {
-                  const entry = entryMap.get(`${u.id}-${d}`);
-                  const info = entry ? TYPE_INFO[entry.type] : undefined;
-                  const isHoliday = !!holidayNameByDate[d];
-                  const weekend = isWeekend(d);
-                  const editable = canEdit(u.id);
-                  const draggable = editable && entry?.type === "S";
-                  const selected = selection.has(cellKey(u.id, d));
-                  return (
-                    <td
-                      key={d}
-                      className={cn(
-                        "h-7 min-w-[1.75rem] border-b border-l p-0 text-center align-middle",
-                        (isHoliday || weekend) && !entry && "bg-muted",
-                        editable && "cursor-pointer hover:opacity-80",
-                        // Layered white/black inset shadow instead of a colored ring so the
-                        // selection stays visible no matter the cell's own background color
-                        // (a colored ring disappears against a same-hued entry like "S").
-                        selected && "shadow-[inset_0_0_0_2px_#fff,inset_0_0_0_4px_#0f172a]"
-                      )}
-                      style={info ? { backgroundColor: info.color, color: info.textColor ?? "#fff" } : undefined}
-                      title={entry?.comment ?? holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
-                      draggable={draggable}
-                      onDragStart={() => draggable && setDragSource({ userId: u.id, date: d })}
-                      onDragOver={(e) => editable && e.preventDefault()}
-                      onDrop={() => editable && handleDrop(u.id, d)}
-                      onClick={() => handleCellClick(u.id, d)}
-                    >
-                      {entry?.type ?? ""}
-                    </td>
-                  );
-                })}
+                {dates.map((d) => renderDataCell(u, d))}
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile: one table per month, stacked — no year-wide horizontal scroll. */}
+      <div ref={mobileGridRef} className="flex flex-col gap-6 md:hidden">
+        {months.map((m) => (
+          <div key={m.month}>
+            <h3 className="mb-2 text-sm font-semibold">
+              {MONTH_NAMES[m.month]} {year}
+            </h3>
+            <div className="overflow-x-auto rounded-md border">
+              <table className="border-collapse text-xs">
+                <thead>
+                  <tr>
+                    <th className="sticky left-0 z-10 min-w-[8rem] border-b bg-background p-2 text-left">
+                      Name
+                    </th>
+                    {m.dates.map((d) => renderDateHeaderCell(d, `m${m.month}`))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id}>
+                      <td className="sticky left-0 z-10 border-b bg-background p-2 font-medium whitespace-nowrap">
+                        {u.name}
+                      </td>
+                      {m.dates.map((d) => renderDataCell(u, d))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
     </>
   );
