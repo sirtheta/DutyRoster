@@ -5,6 +5,7 @@ import { HolidayForm } from "@/components/holiday-form";
 import { HolidayRangeForm } from "@/components/holiday-range-form";
 import { HolidayImportForm } from "@/components/holiday-import-form";
 import { HolidayDeleteButton } from "@/components/holiday-delete-button";
+import { groupConsecutiveHolidays } from "@/lib/holidays";
 
 export default async function HolidaysPage() {
   const session = await requireSession();
@@ -15,6 +16,7 @@ export default async function HolidaysPage() {
     where: { year: { gte: currentYear - 1, lte: currentYear + 1 } },
     orderBy: { date: "asc" },
   });
+  const groups = groupConsecutiveHolidays(holidays);
 
   return (
     <div className="flex flex-col gap-4">
@@ -38,14 +40,14 @@ export default async function HolidaysPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {holidays.map((h) => (
-            <TableRow key={h.id}>
-              <TableCell>{h.date}</TableCell>
-              <TableCell>{h.name}</TableCell>
-              <TableCell>{h.canton ?? "—"}</TableCell>
+          {groups.map((g) => (
+            <TableRow key={g.ids[0]}>
+              <TableCell>{g.from === g.to ? g.from : `${g.from} – ${g.to}`}</TableCell>
+              <TableCell>{g.name}</TableCell>
+              <TableCell>{g.canton ?? "—"}</TableCell>
               {isAdmin && (
                 <TableCell className="text-right">
-                  <HolidayDeleteButton id={h.id} />
+                  <HolidayDeleteButton id={g.ids.length === 1 ? g.ids[0] : g.ids} />
                 </TableCell>
               )}
             </TableRow>

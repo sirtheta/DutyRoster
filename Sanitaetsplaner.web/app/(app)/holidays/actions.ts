@@ -86,6 +86,15 @@ export async function deleteHolidayAction(id: number): Promise<void> {
   revalidatePath("/holidays");
 }
 
+export async function deleteHolidaysAction(ids: number[]): Promise<void> {
+  const session = await requireAdmin();
+  await prisma.holiday.deleteMany({ where: { id: { in: ids } } });
+  for (const id of ids) {
+    await logAudit(session, "DELETE", "Holiday", id);
+  }
+  revalidatePath("/holidays");
+}
+
 export async function importHolidaysAction(year: number, canton: string): Promise<{ count: number }> {
   const session = await requireAdmin();
   const count = await importHolidaysForYear(year, canton);
