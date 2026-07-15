@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    "Sanitaetsplaner.web": {
+      "release-type": "node",
+      "package-name": "sanitaetsplaner-web",
+      "tag-separator": "-v",
+      "component": "Sanitaetsplaner.web"
+    }
+  }
+}

@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ── Users & Roles ─────────────────────────────────────────────────────────────
+
+enum UserRole {
+  Admin
+  Editor
+  Viewer
+}
+
+enum NotifyChannel {
+  Email
+  Telegram
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         UserRole @default(Viewer)
+  isActive     Boolean  @default(true)
+  // Order in the yearly rotation automation (lower = earlier)
+  rotationOrder Int     @default(0)
+
+  // Notification settings
+  notifyEnabled  Boolean       @default(false)
+  notifyChannel  NotifyChannel @default(Email)
+  notifyWeekday  Int           @default(1) // 0=Sun ... 6=Sat, default Monday
+  notifyHour     Int           @default(7) // hour (0-23) local Europe/Zurich
+  telegramChatId String?
+
+  // Stable, immutable token for the personal iCal feed
+  icalToken String @unique @default(cuid())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries       Entry[]
+  auditLogs     AuditLog[]
+  notifications PendingNotification[]
+
+  @@index([rotationOrder])
+}
+
+// ── Duty/absence types ─────────────────────────────────────────────────────────
+
+enum EntryType {
+  U // Sanitaetsuebung (medic exercise)
+  S // Sanitaet (duty)
+  F // Ferien (vacation)
+  G // geschaeftliche Absenz (business absence)
+  C // Kompensieren (compensate)
+  M // Militaer (military)
+  B // Backup
+  K // Kurzarbeit (short-time work)
+  TZ // Teilzeit (part-time)
+  A // Ausbildung (training)
+  H // Homeoffice
+}
+
+enum EntrySource {
+  Automatic
+  Manual
+  Swap
+}
+
+model Entry {
+  id      Int         @id @default(autoincrement())
+  userId  Int
+  date    String // YYYY-MM-DD (local calendar day)
+  type    EntryType
+  source  EntrySource @default(Manual)
+  comment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([type])
+}
+
+// ── Holidays ────────────────────────────────────────────────────────────────────
+
+model Holiday {
+  id     Int    @id @default(autoincrement())
+  date   String // YYYY-MM-DD
+  name   String
+  canton String?
+  year   Int
+
+  @@unique([date, canton])
+  @@index([year])
+}
+
+// ── Audit log ──────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  userName   String
+  action     String // CREATE | UPDATE | DELETE | MOVE | AUTOMATIC | SETTINGS
+  entityType String // Entry | Holiday | User | Settings
+  entityId   Int?
+  details    String? // JSON: { before, after, ... }
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// ── System settings (singleton) ─────────────────────────────────────────────────
+
+model SystemSettings {
+  id Int @id @default(1)
+
+  smtpHost     String?
+  smtpPort     Int?
+  smtpUser     String?
+  smtpPassword String? // AES-encrypted
+  smtpFromName String?
+
+  telegramBotToken String? // AES-encrypted
+
+  rotationBlockSize Int @default(5)
+  defaultCanton     String @default("BE")
+
+  updatedAt DateTime @updatedAt
+}
+
+// ── Notification queue ──────────────────────────────────────────────────────────
+
+model PendingNotification {
+  id        Int           @id @default(autoincrement())
+  userId    Int
+  channel   NotifyChannel
+  subject   String
+  body      String
+  createdAt DateTime      @default(now())
+  sentAt    DateTime?
+  failedAt  DateTime?
+  error     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sentAt])
+}
