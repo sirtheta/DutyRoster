@@ -27,6 +27,9 @@ type EntryRow = {
 
 type UserRow = { id: number; name: string; rotationOrder: number };
 type Cell = { userId: number; date: string };
+// The category currently selected in the always-visible legend. While set,
+// clicking a cell paints it directly instead of toggling the selection.
+type PaintTool = EntryType | "DELETE";
 
 function cellKey(userId: number, date: string): string {
   return `${userId}|${date}`;
@@ -85,6 +88,7 @@ export function CalendarGrid({
   // nudging the same group without re-selecting it.
   const [dragFromSelection, setDragFromSelection] = useState(false);
   const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [activeTool, setActiveTool] = useState<PaintTool | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const mobileGridRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -134,12 +138,17 @@ export function CalendarGrid({
 
   // Tap a cell to add it to the selection, tap it again to remove it —
   // works the same with mouse clicks and touch taps, no modifier key needed.
+  // If a legend category is active instead, the tap paints the cell directly.
   function handleCellClick(userId: number, date: string) {
     if (suppressClickRef.current) {
       suppressClickRef.current = false;
       return;
     }
     if (!canEdit(userId)) return;
+    if (activeTool !== null) {
+      paintCell(userId, date, activeTool);
+      return;
+    }
     const key = cellKey(userId, date);
     setSelection((prev) => {
       const next = new Set(prev);
@@ -163,6 +172,38 @@ export function CalendarGrid({
     });
   }
 
+  // Paints a single cell with the active legend tool. Skipped when it would
+  // be a no-op (deleting an empty cell, or re-applying the same type).
+  function paintCell(userId: number, date: string, tool: PaintTool) {
+    const entry = entryMap.get(`${userId}-${date}`);
+    const type = tool === "DELETE" ? null : tool;
+    if (type === null ? !entry : entry?.type === type) return;
+    startTransition(async () => {
+      const res = await bulkSetEntriesAction([{ userId, date }], type);
+      if (res.error) toast.error(res.error);
+      else router.refresh();
+    });
+  }
+
+  // Clicking a legend category applies it to the current selection if there
+  // is one (existing bulk-apply flow); otherwise it toggles paint mode for
+  // that category so subsequent cell clicks are coloured directly.
+  function handleCategoryClick(type: EntryType) {
+    if (selection.size > 0) {
+      bulkApply(type);
+      return;
+    }
+    setActiveTool((prev) => (prev === type ? null : type));
+  }
+
+  function handleDeleteToolClick() {
+    if (selection.size > 0) {
+      bulkApply(null);
+      return;
+    }
+    setActiveTool((prev) => (prev === "DELETE" ? null : "DELETE"));
+  }
+
   useEffect(() => {
     function handleDocMouseDown(e: MouseEvent) {
       const target = e.target as Node;
@@ -180,20 +221,22 @@ export function CalendarGrid({
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (selection.size === 0) return;
+      if (selection.size === 0 && activeTool === null) return;
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (e.key === "Delete" || e.key === "Backspace") {
+        if (selection.size === 0) return;
         e.preventDefault();
         bulkApply(null);
       } else if (e.key === "Escape") {
         clearSelection();
+        setActiveTool(null);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selection]);
+  }, [selection, activeTool]);
 
   // Grabbing a cell that's part of a multi-selection drags the whole
   // selection together, keeping each cell's offset from the grabbed one.
@@ -469,37 +512,66 @@ export function CalendarGrid({
 
   return (
     <>
-      {/* Always rendered (even with no selection) and just hidden via
-          `invisible`, so it reserves its height at all times — otherwise it
-          popping in/out shifts the grid underneath and rows jump around
-          right when the user is trying to click cells. */}
+      {/* Legend/toolbar: always visible. With an active selection, clicking a
+          category bulk-applies it to the selected cells. With no selection,
+          clicking a category instead arms it as a paint tool — subsequent
+          cell clicks are coloured with it directly until it's toggled off. */}
       <div
         ref={toolbarRef}
-        className={cn(
-          "sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-md border bg-background p-2 shadow-sm",
-          selection.size === 0 && "invisible"
-        )}
+        className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-md border bg-background p-2 shadow-sm"
       >
-        <span className="text-sm text-muted-foreground">{selection.size} Zelle(n) ausgewählt</span>
-        {ENTRY_TYPES.map((type) => (
-          <Button
-            key={type}
-            variant="outline"
-            size="sm"
-            disabled={isPending || (type === "S" && hasWeekendSelected)}
-            onClick={() => bulkApply(type)}
-            style={{ borderColor: TYPE_INFO[type].color, color: TYPE_INFO[type].color }}
-            title={type === "S" && hasWeekendSelected ? "Kein Dienst an Wochenenden." : undefined}
-          >
-            {type} – {TYPE_INFO[type].label}
-          </Button>
-        ))}
-        <Button variant="ghost" size="sm" disabled={isPending} onClick={() => bulkApply(null)}>
+        <span className="text-sm text-muted-foreground">
+          {selection.size > 0
+            ? `${selection.size} Zelle(n) ausgewählt`
+            : activeTool !== null
+              ? "Zellen anklicken zum Einfärben"
+              : "Legende"}
+        </span>
+        {ENTRY_TYPES.map((type) => {
+          const active = activeTool === type;
+          return (
+            <Button
+              key={type}
+              variant="outline"
+              size="sm"
+              disabled={isPending || (type === "S" && hasWeekendSelected)}
+              onClick={() => handleCategoryClick(type)}
+              style={
+                active
+                  ? {
+                      backgroundColor: TYPE_INFO[type].color,
+                      color: TYPE_INFO[type].textColor ?? "#fff",
+                      borderColor: TYPE_INFO[type].color,
+                    }
+                  : { borderColor: TYPE_INFO[type].color, color: TYPE_INFO[type].color }
+              }
+              title={type === "S" && hasWeekendSelected ? "Kein Dienst an Wochenenden." : undefined}
+            >
+              {type} – {TYPE_INFO[type].label}
+            </Button>
+          );
+        })}
+        <Button
+          variant={activeTool === "DELETE" ? "default" : "ghost"}
+          size="sm"
+          disabled={isPending}
+          onClick={handleDeleteToolClick}
+        >
           Löschen
         </Button>
-        <Button variant="ghost" size="sm" disabled={isPending} onClick={clearSelection}>
-          Abbrechen
-        </Button>
+        {(selection.size > 0 || activeTool !== null) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={isPending}
+            onClick={() => {
+              clearSelection();
+              setActiveTool(null);
+            }}
+          >
+            Abbrechen
+          </Button>
+        )}
       </div>
 
       {/* Desktop: full year in one scrollable table. */}
