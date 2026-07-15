@@ -107,21 +107,72 @@ describe("calendar actions", () => {
     expect(res.error).toMatch(/belegt/);
   });
 
-  it("applies an automation preview via createMany and logs one AUTOMATIC entry", async () => {
+  it("generates S-duty entries for a year and logs one AUTOMATIC entry", async () => {
     const { prisma } = db;
-    const admin = await prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    const admin = await prisma.user.create({ data: createTestUser({ role: "Admin", rotationOrder: 0 }) });
     currentSession = sessionFor(admin.id, "Admin");
 
-    const { applyAutomationAction } = await import("@/app/(app)/calendar/[year]/actions");
-    const { count } = await applyAutomationAction(2026, [
-      { date: "2026-07-01", userId: admin.id },
-      { date: "2026-07-02", userId: admin.id },
-    ]);
+    const { generateAutomationAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const { count } = await generateAutomationAction(2026);
 
-    expect(count).toBe(2);
+    expect(count).toBeGreaterThan(0);
     const entries = await prisma.entry.findMany({ where: { source: "Automatic" } });
-    expect(entries).toHaveLength(2);
+    expect(entries).toHaveLength(count);
+    expect(entries.every((e) => e.type === "S")).toBe(true);
     const audit = await prisma.auditLog.findFirstOrThrow({ where: { action: "AUTOMATIC" } });
-    expect(JSON.parse(audit.details!)).toMatchObject({ year: 2026, count: 2 });
+    expect(JSON.parse(audit.details!)).toMatchObject({ year: 2026, count });
+  });
+
+  it("does not create duplicate entries when the generator runs twice", async () => {
+    const { prisma } = db;
+    const admin = await prisma.user.create({ data: createTestUser({ role: "Admin", rotationOrder: 0 }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { generateAutomationAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const first = await generateAutomationAction(2026);
+    const second = await generateAutomationAction(2026);
+
+    expect(second.count).toBe(0);
+    const entries = await prisma.entry.findMany({ where: { source: "Automatic" } });
+    expect(entries).toHaveLength(first.count);
+  });
+
+  it("does not double-book a week where a different user already has S-duty", async () => {
+    const { prisma } = db;
+    const admin = await prisma.user.create({
+      data: createTestUser({ email: "admin@example.com", role: "Admin", rotationOrder: 0 }),
+    });
+    const other = await prisma.user.create({
+      data: createTestUser({ email: "other@example.com", role: "Editor", rotationOrder: 1 }),
+    });
+    // 2026-01-01 is a Thursday — the year's first (partial) week is 01-01/02,
+    // and would normally go to `admin` (rotationOrder 0). `other` already has
+    // duty there instead (e.g. a manual swap), so the week must stay as-is.
+    await prisma.entry.create({ data: { userId: other.id, date: "2026-01-02", type: "S", source: "Manual" } });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { generateAutomationAction } = await import("@/app/(app)/calendar/[year]/actions");
+    await generateAutomationAction(2026);
+
+    const adminEntries = await prisma.entry.findMany({
+      where: { userId: admin.id, date: { in: ["2026-01-01", "2026-01-02"] } },
+    });
+    expect(adminEntries).toHaveLength(0);
+  });
+
+  it("rejects an S-duty entry on a weekend", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    currentSession = sessionFor(user.id, "Editor");
+
+    // 2026-06-06 is a Saturday.
+    const { upsertEntryAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await upsertEntryAction({ userId: user.id, date: "2026-06-06", type: "S" });
+
+    expect(res.error).toMatch(/Wochenende/);
+    const entry = await prisma.entry.findUnique({
+      where: { userId_date: { userId: user.id, date: "2026-06-06" } },
+    });
+    expect(entry).toBeNull();
   });
 });

@@ -52,13 +52,11 @@ model User {
 // ── Duty/absence types ─────────────────────────────────────────────────────────
 
 enum EntryType {
-  U // Sanitaetsuebung (medic exercise)
   S // Sanitaet (duty)
   F // Ferien (vacation)
   G // geschaeftliche Absenz (business absence)
   C // Kompensieren (compensate)
   M // Militaer (military)
-  B // Backup
   K // Kurzarbeit (short-time work)
   TZ // Teilzeit (part-time)
   A // Ausbildung (training)
@@ -133,8 +131,7 @@ model SystemSettings {
 
   telegramBotToken String? // AES-encrypted
 
-  rotationBlockSize Int @default(5)
-  defaultCanton     String @default("BE")
+  defaultCanton String @default("BE")
 
   updatedAt DateTime @updatedAt
 }

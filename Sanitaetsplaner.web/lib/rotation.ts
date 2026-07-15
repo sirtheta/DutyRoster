@@ -1,4 +1,5 @@
-import { datesOfYear } from "@/lib/date";
+import { datesOfYear, isWeekend, parseDate } from "@/lib/date";
+import { weekRange } from "@/lib/week";
 
 export interface RotationUser {
   userId: number;
@@ -9,15 +10,19 @@ export interface RotationOptions {
   year: number;
   /** Active users participating in the rotation (order doesn't matter — sorted by rotationOrder). */
   users: RotationUser[];
-  /** Number of consecutive days per user before the rotation moves to the next user. */
-  blockSize: number;
-  /** Holidays (YYYY-MM-DD) — block the automation entirely for all users on that day. */
+  /** Holidays (YYYY-MM-DD) — no duty is scheduled on these days. */
   holidays: Set<string>;
   /**
-   * Days on which a user already has an entry (F/G/M/A/... or manual) and is
-   * therefore unavailable for the automation on that day. userId -> Set of YYYY-MM-DD.
+   * Days on which a given user already has an entry (any type — their own
+   * duty or absence) and is therefore personally unavailable.
+   * userId -> Set of YYYY-MM-DD.
    */
   blockedDates: Map<number, Set<string>>;
+  /**
+   * Days that already have an S-duty entry for *some* user — the week is
+   * already covered, regardless of who the rotation would otherwise assign.
+   */
+  occupiedDates: Set<string>;
 }
 
 export interface RotationAssignment {
@@ -28,46 +33,47 @@ export interface RotationAssignment {
 /**
  * Pure rotation function for the yearly automation (S-duty).
  *
- * Walks the year in calendar-day order and assigns blocks of `blockSize`
- * consecutive days to users in turn. If the user currently up is blocked on a
- * given day (a holiday affects everyone, `blockedDates` affects only that
- * individual user), the rotation advances to the next user and the skipped
- * day does not count toward that user's next block.
+ * Groups the year's working days into calendar weeks (Mon–Fri; weekends are
+ * never scheduled) and hands each week to the next user in rotation order.
+ * A week is skipped entirely (nobody assigned, rotation still advances to
+ * the next user for the following week) if the assigned user is personally
+ * blocked on any working day of it, or if some other user already has duty
+ * that week. A week that is entirely holidays doesn't consume anyone's turn
+ * at all — rotation stays on the same user for the next real week.
  */
 export function runRotation(options: RotationOptions): RotationAssignment[] {
-  const { year, blockSize, holidays, blockedDates } = options;
+  const { year, holidays, blockedDates, occupiedDates } = options;
   const users = [...options.users].sort((a, b) => a.rotationOrder - b.rotationOrder);
-  if (users.length === 0 || blockSize < 1) return [];
+  if (users.length === 0) return [];
 
   const assignments: RotationAssignment[] = [];
-  const dates = datesOfYear(year);
+  const weeks = groupIntoWeeks(datesOfYear(year));
 
   let userIndex = 0;
-  let dayInBlock = 0;
+  for (const week of weeks) {
+    const workDays = week.filter((d) => !holidays.has(d));
+    if (workDays.length === 0) continue; // fully-holiday week — nobody's turn is used
 
-  for (const date of dates) {
-    if (holidays.has(date)) continue;
-
-    for (let attempt = 0; attempt < users.length; attempt++) {
-      const candidate = users[userIndex];
-      const isBlocked = blockedDates.get(candidate.userId)?.has(date) ?? false;
-      if (!isBlocked) {
-        assignments.push({ date, userId: candidate.userId });
-        dayInBlock++;
-        if (dayInBlock >= blockSize) {
-          dayInBlock = 0;
-          userIndex = (userIndex + 1) % users.length;
-        }
-        break;
-      }
-      // This user is blocked on this day — move to the next user; the
-      // skipped day restarts their block at 1.
-      userIndex = (userIndex + 1) % users.length;
-      dayInBlock = 0;
+    const user = users[userIndex % users.length];
+    const blocked = blockedDates.get(user.userId);
+    const alreadyOccupied = workDays.some((d) => occupiedDates.has(d) || blocked?.has(d));
+    if (!alreadyOccupied) {
+      for (const d of workDays) assignments.push({ date: d, userId: user.userId });
     }
-    // If all users are blocked, the day stays unassigned; rotation state
-    // (userIndex/dayInBlock) is unchanged for the next day.
+    userIndex++;
   }
 
   return assignments;
+}
+
+/** Groups a year's weekday dates into chronological Mon–Fri calendar weeks. */
+function groupIntoWeeks(dates: string[]): string[][] {
+  const weeksByStart = new Map<string, string[]>();
+  for (const d of dates) {
+    if (isWeekend(d)) continue;
+    const { start } = weekRange(parseDate(d)!);
+    if (!weeksByStart.has(start)) weeksByStart.set(start, []);
+    weeksByStart.get(start)!.push(d);
+  }
+  return [...weeksByStart.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, days]) => days);
 }

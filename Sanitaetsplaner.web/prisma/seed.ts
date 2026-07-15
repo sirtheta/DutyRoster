@@ -3,7 +3,6 @@ import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { faker } from "@faker-js/faker";
 import { hash } from "bcryptjs";
 import { randomBytes } from "crypto";
-import { datesOfYear } from "../lib/date";
 import { importHolidaysForYear } from "../lib/holidays";
 
 function createClient() {
@@ -62,36 +61,19 @@ async function ensureSettings() {
   });
 }
 
-async function ensureHolidaysAndSampleEntries(users: { id: number; role: UserRole }[]) {
+async function ensureHolidays() {
   const year = new Date().getFullYear();
   const existingHolidays = await prisma.holiday.count({ where: { year } });
   if (existingHolidays === 0) {
     const count = await importHolidaysForYear(year, "BE");
     console.log(`Imported ${count} holidays for ${year} (BE).`);
   }
-
-  const existingEntries = await prisma.entry.count();
-  if (existingEntries > 0) return;
-
-  const editors = users.filter((u) => u.role !== UserRole.Viewer);
-  if (editors.length === 0) return;
-
-  const dates = datesOfYear(year).slice(0, 60);
-  for (let i = 0; i < dates.length; i++) {
-    const user = editors[Math.floor(i / 5) % editors.length];
-    await prisma.entry.create({
-      data: { userId: user.id, date: dates[i], type: "S", source: "Automatic" },
-    });
-  }
-  console.log(`Created ${dates.length} sample S-Dienst entries for ${year}.`);
 }
 
 async function main() {
-  const created = await ensureUsers();
+  await ensureUsers();
   await ensureSettings();
-
-  const users = created.length > 0 ? created : await prisma.user.findMany();
-  await ensureHolidaysAndSampleEntries(users);
+  await ensureHolidays();
 
   console.log("Seeding complete.");
 }

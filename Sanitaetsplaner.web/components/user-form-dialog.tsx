@@ -26,6 +26,7 @@ export function UserFormDialog({
   trigger: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [notifyEnabled, setNotifyEnabled] = useState(user?.notifyEnabled ?? false);
   const action = mode === "create" ? createUserAction : updateUserAction;
   const [state, formAction, pending] = useActionState(action, undefined);
 
@@ -89,57 +90,63 @@ export function UserFormDialog({
               <option value="Viewer">Viewer</option>
             </select>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="col-span-2 flex items-center gap-2">
             <input
               id="notifyEnabled"
               name="notifyEnabled"
               type="checkbox"
-              defaultChecked={user?.notifyEnabled}
+              checked={notifyEnabled}
+              onChange={(e) => setNotifyEnabled(e.target.checked)}
               className="h-4 w-4"
             />
             <Label htmlFor="notifyEnabled">Benachrichtigung aktiv</Label>
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="notifyChannel">Kanal</Label>
-            <select
-              id="notifyChannel"
-              name="notifyChannel"
-              defaultValue={user?.notifyChannel ?? "Email"}
-              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              <option value="Email">E-Mail</option>
-              <option value="Telegram">Telegram</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="notifyWeekday">Wochentag</Label>
-            <select
-              id="notifyWeekday"
-              name="notifyWeekday"
-              defaultValue={user?.notifyWeekday ?? 1}
-              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              {WEEKDAYS.map((w, i) => (
-                <option key={i} value={i}>
-                  {w}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="notifyHour">Uhrzeit</Label>
-            <Input
-              id="notifyHour"
-              name="notifyHour"
-              type="number"
-              min={0}
-              max={23}
-              defaultValue={user?.notifyHour ?? 7}
-            />
-          </div>
-          <div className="col-span-2 flex flex-col gap-2">
-            <Label htmlFor="telegramChatId">Telegram Chat-ID</Label>
-            <Input id="telegramChatId" name="telegramChatId" defaultValue={user?.telegramChatId ?? ""} />
+          <div className={notifyEnabled ? "contents" : "hidden"}>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="notifyChannel">Kanal</Label>
+                <select
+                  id="notifyChannel"
+                  name="notifyChannel"
+                  defaultValue={user?.notifyChannel ?? "Email"}
+                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                >
+                  <option value="Email">E-Mail</option>
+                  <option value="Telegram">Telegram</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="notifyWeekday">Wochentag</Label>
+                <select
+                  id="notifyWeekday"
+                  name="notifyWeekday"
+                  defaultValue={user?.notifyWeekday ?? 1}
+                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                >
+                  {WEEKDAYS.map((w, i) => (
+                    <option key={i} value={i}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="notifyHour">Uhrzeit (Stunde, 24h)</Label>
+                <Input
+                  id="notifyHour"
+                  name="notifyHour"
+                  type="number"
+                  min={0}
+                  max={23}
+                  defaultValue={user?.notifyHour ?? 7}
+                />
+                <span className="text-xs text-muted-foreground">
+                  z. B. 7 = 07:00 Uhr, lokale Zeit (Europe/Zurich)
+                </span>
+              </div>
+              <div className="col-span-2 flex flex-col gap-2">
+                <Label htmlFor="telegramChatId">Telegram Chat-ID</Label>
+                <Input id="telegramChatId" name="telegramChatId" defaultValue={user?.telegramChatId ?? ""} />
+              </div>
           </div>
           {state?.error && <p className="col-span-2 text-sm text-destructive">{state.error}</p>}
           <DialogFooter className="col-span-2">

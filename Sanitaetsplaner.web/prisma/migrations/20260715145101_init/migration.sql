@@ -61,7 +61,6 @@ CREATE TABLE "SystemSettings" (
     "smtpPassword" TEXT,
     "smtpFromName" TEXT,
     "telegramBotToken" TEXT,
-    "rotationBlockSize" INTEGER NOT NULL DEFAULT 5,
     "defaultCanton" TEXT NOT NULL DEFAULT 'ZH',
     "updatedAt" DATETIME NOT NULL
 );

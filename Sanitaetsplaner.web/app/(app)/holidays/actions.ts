@@ -6,6 +6,7 @@ import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { importHolidaysForYear } from "@/lib/holidays";
+import { addDays } from "@/lib/date";
 
 const holidaySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -34,6 +35,46 @@ export async function createHolidayAction(
     return { error: "Dieser Feiertag existiert bereits für diesen Kanton." };
   }
 
+  revalidatePath("/holidays");
+  return {};
+}
+
+const holidayRangeSchema = z
+  .object({
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    name: z.string().min(1),
+  })
+  .refine((v) => v.from <= v.to, { message: "Von-Datum muss vor oder gleich Bis-Datum sein." });
+
+export async function createHolidayRangeAction(
+  _prevState: { error?: string } | undefined,
+  formData: FormData
+): Promise<{ error?: string }> {
+  const session = await requireAdmin();
+  const parsed = holidayRangeSchema.safeParse({
+    from: formData.get("from"),
+    to: formData.get("to"),
+    name: formData.get("name") || "Betriebsferien",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Ungültige Eingabe." };
+
+  const { from, to, name } = parsed.data;
+  let count = 0;
+  let date = from;
+  while (date <= to) {
+    try {
+      await prisma.holiday.create({
+        data: { date, name, year: parseInt(date.slice(0, 4), 10) },
+      });
+      count++;
+    } catch {
+      // unique constraint (date, canton) — already a holiday on this day, skip
+    }
+    date = addDays(date, 1);
+  }
+
+  await logAudit(session, "CREATE", "Holiday", undefined, { from, to, name, count });
   revalidatePath("/holidays");
   return {};
 }

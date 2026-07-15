@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { requireSession } from "@/lib/permissions";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { HolidayForm } from "@/components/holiday-form";
+import { HolidayRangeForm } from "@/components/holiday-range-form";
 import { HolidayImportForm } from "@/components/holiday-import-form";
 import { HolidayDeleteButton } from "@/components/holiday-delete-button";
 
@@ -23,6 +24,7 @@ export default async function HolidaysPage() {
         <div className="flex flex-wrap gap-4">
           <HolidayImportForm defaultYear={currentYear} />
           <HolidayForm />
+          <HolidayRangeForm />
         </div>
       )}
 

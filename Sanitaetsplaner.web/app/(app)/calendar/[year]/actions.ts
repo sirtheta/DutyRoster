@@ -7,6 +7,7 @@ import { requireAdmin, requireEditor } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { runRotation } from "@/lib/rotation";
 import { holidaySetForYear } from "@/lib/holidays";
+import { isWeekend } from "@/lib/date";
 
 export type Assignment = { date: string; userId: number };
 
@@ -27,6 +28,9 @@ export async function upsertEntryAction(input: {
     assertOwnEntry(session.user.id, session.user.role, input.userId);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Fehler" };
+  }
+  if (input.type === "S" && isWeekend(input.date)) {
+    return { error: "Kein Dienst an Wochenenden." };
   }
 
   const existing = await prisma.entry.findUnique({
@@ -66,6 +70,55 @@ export async function upsertEntryAction(input: {
   return {};
 }
 
+export async function bulkSetEntriesAction(
+  cells: { userId: number; date: string }[],
+  type: EntryType | null
+): Promise<{ count: number; error?: string }> {
+  const session = await requireEditor();
+  const role = session.user.role;
+  const sessionUserId = Number(session.user.id);
+
+  const allowed = cells.filter((c) => role === "Admin" || c.userId === sessionUserId);
+  if (allowed.length === 0) return { count: 0 };
+
+  if (type === "S" && allowed.some((c) => isWeekend(c.date))) {
+    return { count: 0, error: "Kein Dienst an Wochenenden." };
+  }
+
+  let count = 0;
+  await prisma.$transaction(async (tx) => {
+    for (const c of allowed) {
+      if (type === null) {
+        const existing = await tx.entry.findUnique({
+          where: { userId_date: { userId: c.userId, date: c.date } },
+        });
+        if (existing) {
+          await tx.entry.delete({ where: { id: existing.id } });
+          count++;
+        }
+      } else {
+        await tx.entry.upsert({
+          where: { userId_date: { userId: c.userId, date: c.date } },
+          create: { userId: c.userId, date: c.date, type, source: "Manual" },
+          update: { type, source: "Manual" },
+        });
+        count++;
+      }
+    }
+  });
+
+  await logAudit(session, type === null ? "DELETE" : "UPDATE", "Entry", undefined, {
+    bulk: true,
+    count,
+    type,
+  });
+
+  for (const year of new Set(allowed.map((c) => c.date.slice(0, 4)))) {
+    revalidatePath(`/calendar/${year}`);
+  }
+  return { count };
+}
+
 export async function moveEntryAction(input: {
   fromUserId: number;
   fromDate: string;
@@ -80,6 +133,9 @@ export async function moveEntryAction(input: {
   }
   if (session.user.role !== "Admin" && input.toUserId !== input.fromUserId) {
     return { error: "Nur Admins können Dienste anderen Benutzern zuweisen." };
+  }
+  if (isWeekend(input.toDate)) {
+    return { error: "Kein Dienst an Wochenenden." };
   }
 
   const source = await prisma.entry.findUnique({
@@ -119,50 +175,46 @@ export async function moveEntryAction(input: {
   return {};
 }
 
-export async function previewAutomationAction(year: number): Promise<Assignment[]> {
-  await requireAdmin();
+export async function generateAutomationAction(year: number): Promise<{ count: number }> {
+  const session = await requireAdmin();
 
-  const [users, settings, holidays, existing] = await Promise.all([
+  const [users, holidays, existing] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { rotationOrder: "asc" } }),
-    prisma.systemSettings.findUnique({ where: { id: 1 } }),
     holidaySetForYear(year),
     prisma.entry.findMany({ where: { date: { startsWith: `${year}-` } } }),
   ]);
 
   const blockedDates = new Map<number, Set<string>>();
+  const occupiedDates = new Set<string>();
+  const existingKeys = new Set<string>();
   for (const e of existing) {
     if (!blockedDates.has(e.userId)) blockedDates.set(e.userId, new Set());
     blockedDates.get(e.userId)!.add(e.date);
+    if (e.type === "S") occupiedDates.add(e.date);
+    existingKeys.add(`${e.userId}-${e.date}`);
   }
 
-  return runRotation({
+  const assignments = runRotation({
     year,
     users: users.map((u) => ({ userId: u.id, rotationOrder: u.rotationOrder })),
-    blockSize: settings?.rotationBlockSize ?? 5,
     holidays,
     blockedDates,
+    occupiedDates,
   });
-}
 
-export async function applyAutomationAction(
-  year: number,
-  assignments: Assignment[]
-): Promise<{ count: number }> {
-  const session = await requireAdmin();
-
-  // SQLite has no createMany `skipDuplicates` support, and a race between
-  // preview and apply could mean a slot got filled in the meantime — so each
-  // row is created individually and conflicts are simply skipped.
+  // Days that already have an entry (from an earlier run or manual edit)
+  // are never touched, so re-running the generator can't create duplicates.
   let count = 0;
   await prisma.$transaction(async (tx) => {
     for (const a of assignments) {
+      if (existingKeys.has(`${a.userId}-${a.date}`)) continue;
       try {
         await tx.entry.create({
           data: { userId: a.userId, date: a.date, type: "S", source: "Automatic" },
         });
         count++;
       } catch {
-        // unique constraint (userId, date) — slot filled since the preview, skip
+        // unique constraint (userId, date) — filled concurrently, skip
       }
     }
   });

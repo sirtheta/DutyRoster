@@ -22,26 +22,14 @@ export function SettingsForm({ settings }: { settings: SystemSettings | null }) 
         <CardHeader>
           <CardTitle className="text-base">Automatik</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="rotationBlockSize">Blockgrösse (Tage)</Label>
-            <Input
-              id="rotationBlockSize"
-              name="rotationBlockSize"
-              type="number"
-              min={1}
-              defaultValue={settings?.rotationBlockSize ?? 5}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="defaultCanton">Standard-Kanton (Feiertage)</Label>
-            <Input
-              id="defaultCanton"
-              name="defaultCanton"
-              maxLength={2}
-              defaultValue={settings?.defaultCanton ?? "BE"}
-            />
-          </div>
+        <CardContent className="flex flex-col gap-2 max-w-xs">
+          <Label htmlFor="defaultCanton">Standard-Kanton (Feiertage)</Label>
+          <Input
+            id="defaultCanton"
+            name="defaultCanton"
+            maxLength={2}
+            defaultValue={settings?.defaultCanton ?? "BE"}
+          />
         </CardContent>
       </Card>
 
