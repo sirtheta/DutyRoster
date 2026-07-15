@@ -53,3 +53,10 @@ export function isWeekend(str: string): boolean {
   const w = weekday(str);
   return w === 0 || w === 6;
 }
+
+const WEEKDAY_ABBR = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+/** Two-letter German weekday abbreviation for a `YYYY-MM-DD` string. */
+export function weekdayAbbr(str: string): string {
+  return WEEKDAY_ABBR[weekday(str)];
+}

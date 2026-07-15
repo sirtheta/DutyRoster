@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import type { EntryType, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { TYPE_INFO, ENTRY_TYPES } from "@/lib/entry-types";
-import { datesOfYear, isWeekend } from "@/lib/date";
+import { datesOfYear, isWeekend, weekdayAbbr } from "@/lib/date";
 import { bulkSetEntriesAction, moveEntryAction, moveEntriesAction } from "@/app/(app)/calendar/[year]/actions";
 import { Button } from "@/components/ui/button";
 
@@ -293,7 +293,8 @@ export function CalendarGrid({
         )}
         title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
       >
-        {parseInt(d.slice(8, 10), 10)}
+        <div className="text-[0.65rem] leading-none">{weekdayAbbr(d)}</div>
+        <div>{parseInt(d.slice(8, 10), 10)}</div>
       </th>
     );
   }
@@ -412,7 +413,8 @@ export function CalendarGrid({
                     )}
                     title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
                   >
-                    {parseInt(d.slice(8, 10), 10)}
+                    <div className="text-[0.65rem] leading-none">{weekdayAbbr(d)}</div>
+                    <div>{parseInt(d.slice(8, 10), 10)}</div>
                   </th>
                 );
               })}
