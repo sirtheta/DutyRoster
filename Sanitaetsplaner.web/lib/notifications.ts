@@ -40,13 +40,22 @@ export function startNotificationScheduler(): void {
  * per user (skips users already queued for this week, so retries of the
  * same hour don't produce duplicates).
  */
-export async function queueDueNotifications(prisma: PrismaClient, now = new Date()): Promise<number> {
+export async function queueDueNotifications(
+  prisma: PrismaClient,
+  now = new Date(),
+  opts: { force?: boolean } = {}
+): Promise<number> {
+  const { force = false } = opts;
   const weekday = now.getDay();
   const hour = now.getHours();
   const { start, end } = weekRange(now);
 
   const dueUsers = await prisma.user.findMany({
-    where: { isActive: true, notifyEnabled: true, notifyWeekday: weekday, notifyHour: hour },
+    where: {
+      isActive: true,
+      notifyEnabled: true,
+      ...(force ? {} : { notifyWeekday: weekday, notifyHour: hour }),
+    },
   });
 
   let queued = 0;
@@ -57,10 +66,12 @@ export async function queueDueNotifications(prisma: PrismaClient, now = new Date
     });
     if (sDuties.length === 0) continue;
 
-    const alreadyQueued = await prisma.pendingNotification.findFirst({
-      where: { userId: user.id, createdAt: { gte: new Date(`${start}T00:00:00`) } },
-    });
-    if (alreadyQueued) continue;
+    if (!force) {
+      const alreadyQueued = await prisma.pendingNotification.findFirst({
+        where: { userId: user.id, createdAt: { gte: new Date(`${start}T00:00:00`) } },
+      });
+      if (alreadyQueued) continue;
+    }
 
     const dates = sDuties.map((e) => e.date).join(", ");
     const subject = `Sanitätsplaner: Dein S-Dienst diese Woche`;

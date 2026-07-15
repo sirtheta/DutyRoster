@@ -6,6 +6,7 @@ import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { encryptSecret } from "@/lib/crypto";
+import { queueDueNotifications, dispatchPendingNotifications } from "@/lib/notifications";
 
 const settingsSchema = z.object({
   smtpHost: z.string().optional(),
@@ -49,4 +50,21 @@ export async function updateSettingsAction(
 
   revalidatePath("/settings");
   return { success: true };
+}
+
+/** Dev-only: runs the real notification pipeline (email + Telegram) on demand, ignoring each user's configured weekday/hour. */
+export async function triggerNotificationCheck(): Promise<{ error?: string; success?: boolean; queued?: number }> {
+  if (process.env.NODE_ENV === "production") {
+    return { error: "Nur in Entwicklungsumgebungen verfügbar." };
+  }
+  const session = await requireAdmin();
+  try {
+    const queued = await queueDueNotifications(prisma, new Date(), { force: true });
+    await dispatchPendingNotifications(prisma);
+    await logAudit(session, "SETTINGS", "Settings", 1, { action: "triggerNotificationCheck", queued });
+    revalidatePath("/settings");
+    return { success: true, queued };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unbekannter Fehler" };
+  }
 }
