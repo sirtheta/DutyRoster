@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { EntryType, UserRole } from "@prisma/client";
@@ -36,6 +37,25 @@ function parseCellKey(key: string): Cell {
   return { userId: Number(userId), date };
 }
 
+// Dragging is driven by Pointer Events rather than native HTML5 DnD, since
+// the latter has no touch equivalent. Mouse drags start as soon as the
+// pointer moves past a small threshold; touch/pen require a brief long-press
+// first so an ordinary scroll gesture isn't hijacked.
+const DRAG_MOVE_THRESHOLD = 8;
+const LONG_PRESS_MS = 300;
+const LONG_PRESS_MOVE_TOLERANCE = 10;
+
+type DragPointerState = {
+  pointerId: number;
+  userId: number;
+  date: string;
+  startX: number;
+  startY: number;
+  pointerType: string;
+  longPressTimer: ReturnType<typeof setTimeout> | null;
+  started: boolean;
+};
+
 interface CalendarGridProps {
   year: number;
   users: UserRow[];
@@ -68,6 +88,11 @@ export function CalendarGrid({
   const gridRef = useRef<HTMLDivElement>(null);
   const mobileGridRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const dragPointerRef = useRef<DragPointerState | null>(null);
+  // Set right before a drag starts so the click that follows pointerup
+  // (browsers fire it regardless of what pointer events did) doesn't also
+  // toggle the drop-target cell's selection.
+  const suppressClickRef = useRef(false);
 
   const entryMap = useMemo(() => {
     const map = new Map<string, EntryRow>();
@@ -110,6 +135,10 @@ export function CalendarGrid({
   // Tap a cell to add it to the selection, tap it again to remove it —
   // works the same with mouse clicks and touch taps, no modifier key needed.
   function handleCellClick(userId: number, date: string) {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     if (!canEdit(userId)) return;
     const key = cellKey(userId, date);
     setSelection((prev) => {
@@ -277,6 +306,96 @@ export function CalendarGrid({
     });
   }
 
+  // Finds the calendar cell under an absolute point on screen, used while
+  // dragging since pointer capture keeps move/up events targeted at the cell
+  // the drag started on rather than whatever is currently under the pointer.
+  function cellFromPoint(x: number, y: number): Cell | null {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const cellEl = el?.closest("td[data-user-id]") as HTMLElement | null;
+    if (!cellEl?.dataset.date) return null;
+    const userId = Number(cellEl.dataset.userId);
+    if (Number.isNaN(userId)) return null;
+    return { userId, date: cellEl.dataset.date };
+  }
+
+  function handleCellPointerDown(
+    e: ReactPointerEvent<HTMLTableCellElement>,
+    userId: number,
+    date: string,
+    draggable: boolean
+  ) {
+    if (!draggable) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const state: DragPointerState = {
+      pointerId: e.pointerId,
+      userId,
+      date,
+      startX: e.clientX,
+      startY: e.clientY,
+      pointerType: e.pointerType,
+      longPressTimer: null,
+      started: false,
+    };
+    if (e.pointerType !== "mouse") {
+      state.longPressTimer = setTimeout(() => {
+        if (dragPointerRef.current === state) {
+          state.started = true;
+          suppressClickRef.current = true;
+          handleDragStart(userId, date);
+        }
+      }, LONG_PRESS_MS);
+    }
+    dragPointerRef.current = state;
+  }
+
+  function handleCellPointerMove(e: ReactPointerEvent<HTMLTableCellElement>) {
+    const state = dragPointerRef.current;
+    if (!state || state.pointerId !== e.pointerId) return;
+    const dist = Math.hypot(e.clientX - state.startX, e.clientY - state.startY);
+
+    if (!state.started) {
+      if (state.pointerType === "mouse") {
+        if (dist > DRAG_MOVE_THRESHOLD) {
+          state.started = true;
+          suppressClickRef.current = true;
+          handleDragStart(state.userId, state.date);
+        }
+      } else if (dist > LONG_PRESS_MOVE_TOLERANCE && state.longPressTimer) {
+        // Moved too far before the long-press fired — let it scroll instead.
+        clearTimeout(state.longPressTimer);
+        dragPointerRef.current = null;
+        return;
+      }
+    }
+
+    if (state.started) {
+      e.preventDefault();
+      const target = cellFromPoint(e.clientX, e.clientY);
+      if (target) handleDragOverCell(target.userId, target.date);
+    }
+  }
+
+  function handleCellPointerUp(e: ReactPointerEvent<HTMLTableCellElement>) {
+    const state = dragPointerRef.current;
+    if (!state || state.pointerId !== e.pointerId) return;
+    if (state.longPressTimer) clearTimeout(state.longPressTimer);
+    dragPointerRef.current = null;
+    if (state.started) {
+      const target = cellFromPoint(e.clientX, e.clientY);
+      if (target) handleDrop(target.userId, target.date);
+      else handleDragEnd();
+    }
+  }
+
+  function handleCellPointerCancel(e: ReactPointerEvent<HTMLTableCellElement>) {
+    const state = dragPointerRef.current;
+    if (!state || state.pointerId !== e.pointerId) return;
+    if (state.longPressTimer) clearTimeout(state.longPressTimer);
+    dragPointerRef.current = null;
+    if (state.started) handleDragEnd();
+  }
+
   const hasWeekendSelected = useMemo(
     () => [...selection].some((k) => isWeekend(parseCellKey(k).date)),
     [selection]
@@ -305,7 +424,7 @@ export function CalendarGrid({
     const isHoliday = !!holidayNameByDate[d];
     const weekend = isWeekend(d);
     const editable = canEdit(u.id);
-    const draggable = editable && entry?.type === "S";
+    const draggable = editable && !!entry;
     const key = cellKey(u.id, d);
     const selected = selection.has(key);
     const isDragSource = dragCells?.some((c) => c.userId === u.id && c.date === d) ?? false;
@@ -318,6 +437,11 @@ export function CalendarGrid({
           "h-7 min-w-[1.75rem] border-b border-l p-0 text-center align-middle",
           (isHoliday || weekend) && !entry && "bg-muted",
           editable && "cursor-pointer hover:opacity-80",
+          // Touch browsers decide whether a touch will pan/scroll the page
+          // right at touchstart, based on this CSS — not on anything our JS
+          // does later. Without it, the browser commits to scrolling before
+          // our long-press-to-drag timer ever gets a chance to run.
+          draggable && "touch-none",
           // Layered white/black inset shadow instead of a colored ring so the
           // selection stays visible no matter the cell's own background color
           // (a colored ring disappears against a same-hued entry like "S").
@@ -330,15 +454,12 @@ export function CalendarGrid({
         )}
         style={info ? { backgroundColor: info.color, color: info.textColor ?? "#fff" } : undefined}
         title={entry?.comment ?? holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
-        draggable={draggable}
-        onDragStart={() => draggable && handleDragStart(u.id, d)}
-        onDragOver={(e) => {
-          if (!editable) return;
-          e.preventDefault();
-          if (dragCells) handleDragOverCell(u.id, d);
-        }}
-        onDrop={() => editable && handleDrop(u.id, d)}
-        onDragEnd={handleDragEnd}
+        data-user-id={u.id}
+        data-date={d}
+        onPointerDown={(e) => handleCellPointerDown(e, u.id, d, draggable)}
+        onPointerMove={handleCellPointerMove}
+        onPointerUp={handleCellPointerUp}
+        onPointerCancel={handleCellPointerCancel}
         onClick={() => handleCellClick(u.id, d)}
       >
         {entry?.type ?? ""}
