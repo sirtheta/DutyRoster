@@ -7,7 +7,7 @@ import type { EntryType, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { TYPE_INFO, ENTRY_TYPES } from "@/lib/entry-types";
 import { datesOfYear, isWeekend } from "@/lib/date";
-import { bulkSetEntriesAction, moveEntryAction } from "@/app/(app)/calendar/[year]/actions";
+import { bulkSetEntriesAction, moveEntryAction, moveEntriesAction } from "@/app/(app)/calendar/[year]/actions";
 import { Button } from "@/components/ui/button";
 
 const MONTH_NAMES = [
@@ -55,7 +55,15 @@ export function CalendarGrid({
 }: CalendarGridProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [dragSource, setDragSource] = useState<Cell | null>(null);
+  // The full set of cells being dragged (the selection, if the drag started
+  // on a selected cell and more than one is selected; otherwise just that cell).
+  const [dragCells, setDragCells] = useState<Cell[] | null>(null);
+  const [dragAnchor, setDragAnchor] = useState<Cell | null>(null);
+  const [hoverCell, setHoverCell] = useState<Cell | null>(null);
+  // Whether the current drag was grabbed from the selection — if so, the
+  // selection follows the cells to their new spot so the user can keep
+  // nudging the same group without re-selecting it.
+  const [dragFromSelection, setDragFromSelection] = useState(false);
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const gridRef = useRef<HTMLDivElement>(null);
   const mobileGridRef = useRef<HTMLDivElement>(null);
@@ -68,6 +76,16 @@ export function CalendarGrid({
   }, [entries]);
 
   const dates = useMemo(() => datesOfYear(year), [year]);
+  const userIndexById = useMemo(() => {
+    const map = new Map<number, number>();
+    users.forEach((u, i) => map.set(u.id, i));
+    return map;
+  }, [users]);
+  const dateIndexByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    dates.forEach((d, i) => map.set(d, i));
+    return map;
+  }, [dates]);
   const months = useMemo(() => {
     const groups: { month: number; dates: string[] }[] = [];
     for (const d of dates) {
@@ -148,22 +166,113 @@ export function CalendarGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection]);
 
+  // Grabbing a cell that's part of a multi-selection drags the whole
+  // selection together, keeping each cell's offset from the grabbed one.
+  function handleDragStart(userId: number, date: string) {
+    const anchor = { userId, date };
+    const key = cellKey(userId, date);
+    const fromSelection = selection.has(key);
+    const cells = fromSelection ? [...selection].map(parseCellKey) : [anchor];
+    setDragAnchor(anchor);
+    setDragCells(cells);
+    setHoverCell(anchor);
+    setDragFromSelection(fromSelection);
+  }
+
+  function handleDragOverCell(userId: number, date: string) {
+    setHoverCell((prev) => (prev && prev.userId === userId && prev.date === date ? prev : { userId, date }));
+  }
+
+  function handleDragEnd() {
+    setDragCells(null);
+    setDragAnchor(null);
+    setHoverCell(null);
+    setDragFromSelection(false);
+  }
+
+  // Live preview of where the dragged cells would land, computed from the
+  // offset between the grabbed cell and the cell currently hovered over.
+  const dragPreview = useMemo(() => {
+    if (!dragCells || !dragAnchor || !hoverCell) return null;
+    const anchorUserIdx = userIndexById.get(dragAnchor.userId);
+    const anchorDateIdx = dateIndexByDate.get(dragAnchor.date);
+    const hoverUserIdx = userIndexById.get(hoverCell.userId);
+    const hoverDateIdx = dateIndexByDate.get(hoverCell.date);
+    if (anchorUserIdx == null || anchorDateIdx == null || hoverUserIdx == null || hoverDateIdx == null) {
+      return null;
+    }
+    const dUser = hoverUserIdx - anchorUserIdx;
+    const dDate = hoverDateIdx - anchorDateIdx;
+
+    const sourceKeys = new Set(dragCells.map((c) => cellKey(c.userId, c.date)));
+    const valid = new Set<string>();
+    const conflict = new Set<string>();
+    for (const c of dragCells) {
+      const ui = userIndexById.get(c.userId);
+      const di = dateIndexByDate.get(c.date);
+      if (ui == null || di == null) return null;
+      const targetUser = users[ui + dUser];
+      const targetDate = dates[di + dDate];
+      if (!targetUser || !targetDate) return null;
+      const key = cellKey(targetUser.id, targetDate);
+      const occupied = entryMap.has(`${targetUser.id}-${targetDate}`) && !sourceKeys.has(key);
+      const forbiddenUserChange = role !== "Admin" && targetUser.id !== c.userId;
+      if (occupied || isWeekend(targetDate) || forbiddenUserChange) conflict.add(key);
+      else valid.add(key);
+    }
+    return { valid, conflict };
+  }, [dragCells, dragAnchor, hoverCell, userIndexById, dateIndexByDate, users, dates, entryMap, role]);
+
   function handleDrop(targetUserId: number, targetDate: string) {
-    if (!dragSource) return;
-    const source = dragSource;
-    setDragSource(null);
-    if (source.userId === targetUserId && source.date === targetDate) return;
+    if (!dragCells || !dragAnchor) return;
+    const cells = dragCells;
+    const anchor = dragAnchor;
+    const keepSelection = dragFromSelection;
+    handleDragEnd();
+
+    const anchorUserIdx = userIndexById.get(anchor.userId);
+    const anchorDateIdx = dateIndexByDate.get(anchor.date);
+    const targetUserIdx = userIndexById.get(targetUserId);
+    const targetDateIdx = dateIndexByDate.get(targetDate);
+    if (anchorUserIdx == null || anchorDateIdx == null || targetUserIdx == null || targetDateIdx == null) return;
+    const dUser = targetUserIdx - anchorUserIdx;
+    const dDate = targetDateIdx - anchorDateIdx;
+    if (dUser === 0 && dDate === 0) return;
+
+    const moves: { fromUserId: number; fromDate: string; toUserId: number; toDate: string }[] = [];
+    for (const c of cells) {
+      const ui = userIndexById.get(c.userId);
+      const di = dateIndexByDate.get(c.date);
+      if (ui == null || di == null) return;
+      const toUser = users[ui + dUser];
+      const toDate = dates[di + dDate];
+      if (!toUser || !toDate) {
+        toast.error("Zielbereich liegt ausserhalb des Kalenders.");
+        return;
+      }
+      moves.push({ fromUserId: c.userId, fromDate: c.date, toUserId: toUser.id, toDate });
+    }
+
     startTransition(async () => {
-      const res = await moveEntryAction({
-        fromUserId: source.userId,
-        fromDate: source.date,
-        toUserId: targetUserId,
-        toDate: targetDate,
-      });
-      if (res.error) toast.error(res.error);
-      else {
-        toast.success("Dienst verschoben.");
-        router.refresh();
+      const movedSelection = keepSelection
+        ? new Set(moves.map((m) => cellKey(m.toUserId, m.toDate)))
+        : null;
+      if (moves.length === 1) {
+        const res = await moveEntryAction(moves[0]);
+        if (res.error) toast.error(res.error);
+        else {
+          toast.success("Dienst verschoben.");
+          if (movedSelection) setSelection(movedSelection);
+          router.refresh();
+        }
+      } else {
+        const res = await moveEntriesAction(moves);
+        if (res.error) toast.error(res.error);
+        else {
+          toast.success(`${res.count ?? moves.length} Dienste verschoben.`);
+          if (movedSelection) setSelection(movedSelection);
+          router.refresh();
+        }
       }
     });
   }
@@ -196,7 +305,11 @@ export function CalendarGrid({
     const weekend = isWeekend(d);
     const editable = canEdit(u.id);
     const draggable = editable && entry?.type === "S";
-    const selected = selection.has(cellKey(u.id, d));
+    const key = cellKey(u.id, d);
+    const selected = selection.has(key);
+    const isDragSource = dragCells?.some((c) => c.userId === u.id && c.date === d) ?? false;
+    const previewValid = dragPreview?.valid.has(key) ?? false;
+    const previewConflict = dragPreview?.conflict.has(key) ?? false;
     return (
       <td
         key={d}
@@ -207,14 +320,24 @@ export function CalendarGrid({
           // Layered white/black inset shadow instead of a colored ring so the
           // selection stays visible no matter the cell's own background color
           // (a colored ring disappears against a same-hued entry like "S").
-          selected && "shadow-[inset_0_0_0_2px_#fff,inset_0_0_0_4px_#0f172a]"
+          selected && "shadow-[inset_0_0_0_2px_#fff,inset_0_0_0_4px_#0f172a]",
+          isDragSource && "opacity-40",
+          // Live drop preview: blue outline where the drag would land, red
+          // where that would fail (occupied, weekend, or not permitted).
+          previewValid && "shadow-[inset_0_0_0_2px_#2563eb]",
+          previewConflict && "shadow-[inset_0_0_0_2px_#dc2626]"
         )}
         style={info ? { backgroundColor: info.color, color: info.textColor ?? "#fff" } : undefined}
         title={entry?.comment ?? holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
         draggable={draggable}
-        onDragStart={() => draggable && setDragSource({ userId: u.id, date: d })}
-        onDragOver={(e) => editable && e.preventDefault()}
+        onDragStart={() => draggable && handleDragStart(u.id, d)}
+        onDragOver={(e) => {
+          if (!editable) return;
+          e.preventDefault();
+          if (dragCells) handleDragOverCell(u.id, d);
+        }}
         onDrop={() => editable && handleDrop(u.id, d)}
+        onDragEnd={handleDragEnd}
         onClick={() => handleCellClick(u.id, d)}
       >
         {entry?.type ?? ""}
@@ -224,30 +347,38 @@ export function CalendarGrid({
 
   return (
     <>
-      {selection.size > 0 && (
-        <div ref={toolbarRef} className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-md border bg-background p-2 shadow-sm">
-          <span className="text-sm text-muted-foreground">{selection.size} Zelle(n) ausgewählt</span>
-          {ENTRY_TYPES.map((type) => (
-            <Button
-              key={type}
-              variant="outline"
-              size="sm"
-              disabled={isPending || (type === "S" && hasWeekendSelected)}
-              onClick={() => bulkApply(type)}
-              style={{ borderColor: TYPE_INFO[type].color, color: TYPE_INFO[type].color }}
-              title={type === "S" && hasWeekendSelected ? "Kein Dienst an Wochenenden." : undefined}
-            >
-              {type} – {TYPE_INFO[type].label}
-            </Button>
-          ))}
-          <Button variant="ghost" size="sm" disabled={isPending} onClick={() => bulkApply(null)}>
-            Löschen
+      {/* Always rendered (even with no selection) and just hidden via
+          `invisible`, so it reserves its height at all times — otherwise it
+          popping in/out shifts the grid underneath and rows jump around
+          right when the user is trying to click cells. */}
+      <div
+        ref={toolbarRef}
+        className={cn(
+          "sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-md border bg-background p-2 shadow-sm",
+          selection.size === 0 && "invisible"
+        )}
+      >
+        <span className="text-sm text-muted-foreground">{selection.size} Zelle(n) ausgewählt</span>
+        {ENTRY_TYPES.map((type) => (
+          <Button
+            key={type}
+            variant="outline"
+            size="sm"
+            disabled={isPending || (type === "S" && hasWeekendSelected)}
+            onClick={() => bulkApply(type)}
+            style={{ borderColor: TYPE_INFO[type].color, color: TYPE_INFO[type].color }}
+            title={type === "S" && hasWeekendSelected ? "Kein Dienst an Wochenenden." : undefined}
+          >
+            {type} – {TYPE_INFO[type].label}
           </Button>
-          <Button variant="ghost" size="sm" disabled={isPending} onClick={clearSelection}>
-            Abbrechen
-          </Button>
-        </div>
-      )}
+        ))}
+        <Button variant="ghost" size="sm" disabled={isPending} onClick={() => bulkApply(null)}>
+          Löschen
+        </Button>
+        <Button variant="ghost" size="sm" disabled={isPending} onClick={clearSelection}>
+          Abbrechen
+        </Button>
+      </div>
 
       {/* Desktop: full year in one scrollable table. */}
       <div ref={gridRef} className="hidden overflow-x-auto rounded-md border md:block">

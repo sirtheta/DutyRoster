@@ -175,6 +175,83 @@ export async function moveEntryAction(input: {
   return {};
 }
 
+export async function moveEntriesAction(
+  moves: { fromUserId: number; fromDate: string; toUserId: number; toDate: string }[]
+): Promise<{ count?: number; error?: string }> {
+  const session = await requireEditor();
+  if (moves.length === 0) return { count: 0 };
+
+  const role = session.user.role;
+  for (const m of moves) {
+    try {
+      assertOwnEntry(session.user.id, role, m.fromUserId);
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Fehler" };
+    }
+    if (role !== "Admin" && m.toUserId !== m.fromUserId) {
+      return { error: "Nur Admins können Dienste anderen Benutzern zuweisen." };
+    }
+    if (isWeekend(m.toDate)) {
+      return { error: "Kein Dienst an Wochenenden." };
+    }
+  }
+
+  const targetKeys = new Set(moves.map((m) => `${m.toUserId}-${m.toDate}`));
+  if (targetKeys.size !== moves.length) {
+    return { error: "Mehrere Dienste können nicht auf dieselbe Zielzelle verschoben werden." };
+  }
+
+  const sources = await prisma.entry.findMany({
+    where: { OR: moves.map((m) => ({ userId: m.fromUserId, date: m.fromDate })) },
+  });
+  const sourceMap = new Map(sources.map((s) => [`${s.userId}-${s.date}`, s]));
+  for (const m of moves) {
+    const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`);
+    if (!s || s.type !== "S") {
+      return { error: "Nur S-Dienste können verschoben werden." };
+    }
+  }
+
+  // A destination is fine if it's empty, or if it's only occupied by one of
+  // the entries in this same batch (which will be vacated by this move).
+  const sourceKeys = new Set(sourceMap.keys());
+  const destinations = await prisma.entry.findMany({
+    where: { OR: moves.map((m) => ({ userId: m.toUserId, date: m.toDate })) },
+  });
+  for (const d of destinations) {
+    if (!sourceKeys.has(`${d.userId}-${d.date}`)) {
+      return { error: "Zielzelle ist bereits belegt." };
+    }
+  }
+
+  // Delete all sources before creating any destination so overlapping
+  // moves (shifts/swaps within the same batch) don't hit the unique
+  // (userId, date) constraint mid-transaction.
+  await prisma.$transaction(async (tx) => {
+    for (const m of moves) {
+      const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`)!;
+      await tx.entry.delete({ where: { id: s.id } });
+    }
+    for (const m of moves) {
+      const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`)!;
+      await tx.entry.create({
+        data: { userId: m.toUserId, date: m.toDate, type: "S", source: "Swap", comment: s.comment },
+      });
+    }
+  });
+
+  await logAudit(session, "MOVE", "Entry", undefined, { bulk: true, count: moves.length, moves });
+
+  const years = new Set<string>();
+  for (const m of moves) {
+    years.add(m.fromDate.slice(0, 4));
+    years.add(m.toDate.slice(0, 4));
+  }
+  for (const year of years) revalidatePath(`/calendar/${year}`);
+
+  return { count: moves.length };
+}
+
 export async function generateAutomationAction(year: number): Promise<{ count: number }> {
   const session = await requireAdmin();
 

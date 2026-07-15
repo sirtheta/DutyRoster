@@ -107,6 +107,119 @@ describe("calendar actions", () => {
     expect(res.error).toMatch(/belegt/);
   });
 
+  it("moves multiple S-Dienste together, preserving their relative offsets", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-06-01", type: "S" } });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-06-02", type: "S" } });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { moveEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await moveEntriesAction([
+      { fromUserId: user.id, fromDate: "2026-06-01", toUserId: user.id, toDate: "2026-06-08" },
+      { fromUserId: user.id, fromDate: "2026-06-02", toUserId: user.id, toDate: "2026-06-09" },
+    ]);
+
+    expect(res.error).toBeUndefined();
+    expect(res.count).toBe(2);
+    expect(
+      await prisma.entry.findUnique({ where: { userId_date: { userId: user.id, date: "2026-06-01" } } })
+    ).toBeNull();
+    expect(
+      await prisma.entry.findUnique({ where: { userId_date: { userId: user.id, date: "2026-06-02" } } })
+    ).toBeNull();
+    expect(
+      (await prisma.entry.findUniqueOrThrow({ where: { userId_date: { userId: user.id, date: "2026-06-08" } } }))
+        .type
+    ).toBe("S");
+    expect(
+      (await prisma.entry.findUniqueOrThrow({ where: { userId_date: { userId: user.id, date: "2026-06-09" } } }))
+        .type
+    ).toBe("S");
+
+    const audit = await prisma.auditLog.findFirstOrThrow({ where: { action: "MOVE" } });
+    expect(JSON.parse(audit.details!)).toMatchObject({ bulk: true, count: 2 });
+  });
+
+  it("allows a multi-move that shifts into a slot vacated by the same batch", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-06-01", type: "S" } });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-06-02", type: "S" } });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { moveEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    // Shift the block one day later: 06-02 moves into the slot 06-01 is
+    // about to vacate, which must not be treated as "already occupied".
+    const res = await moveEntriesAction([
+      { fromUserId: user.id, fromDate: "2026-06-01", toUserId: user.id, toDate: "2026-06-02" },
+      { fromUserId: user.id, fromDate: "2026-06-02", toUserId: user.id, toDate: "2026-06-03" },
+    ]);
+
+    expect(res.error).toBeUndefined();
+    expect(res.count).toBe(2);
+    expect(
+      (await prisma.entry.findUniqueOrThrow({ where: { userId_date: { userId: user.id, date: "2026-06-02" } } }))
+        .type
+    ).toBe("S");
+    expect(
+      (await prisma.entry.findUniqueOrThrow({ where: { userId_date: { userId: user.id, date: "2026-06-03" } } }))
+        .type
+    ).toBe("S");
+  });
+
+  it("rejects a multi-move if any target is occupied by an entry outside the batch", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-06-01", type: "S" } });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-06-02", type: "S" } });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-06-09", type: "F" } });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { moveEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await moveEntriesAction([
+      { fromUserId: user.id, fromDate: "2026-06-01", toUserId: user.id, toDate: "2026-06-08" },
+      { fromUserId: user.id, fromDate: "2026-06-02", toUserId: user.id, toDate: "2026-06-09" },
+    ]);
+
+    expect(res.error).toMatch(/belegt/);
+    // Nothing should have moved.
+    expect(
+      (await prisma.entry.findUniqueOrThrow({ where: { userId_date: { userId: user.id, date: "2026-06-01" } } }))
+        .type
+    ).toBe("S");
+  });
+
+  it("rejects a multi-move that includes a weekend target", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-06-01", type: "S" } });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { moveEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    // 2026-06-06 is a Saturday.
+    const res = await moveEntriesAction([
+      { fromUserId: user.id, fromDate: "2026-06-01", toUserId: user.id, toDate: "2026-06-06" },
+    ]);
+
+    expect(res.error).toMatch(/Wochenende/);
+  });
+
+  it("rejects an editor multi-moving another user's entry", async () => {
+    const { prisma } = db;
+    const editor = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Editor" }) });
+    const other = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Editor" }) });
+    await prisma.entry.create({ data: { userId: other.id, date: "2026-06-01", type: "S" } });
+    currentSession = sessionFor(editor.id, "Editor");
+
+    const { moveEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await moveEntriesAction([
+      { fromUserId: other.id, fromDate: "2026-06-01", toUserId: other.id, toDate: "2026-06-08" },
+    ]);
+
+    expect(res.error).toMatch(/Berechtigung/);
+  });
+
   it("generates S-duty entries for a year and logs one AUTOMATIC entry", async () => {
     const { prisma } = db;
     const admin = await prisma.user.create({ data: createTestUser({ role: "Admin", rotationOrder: 0 }) });
