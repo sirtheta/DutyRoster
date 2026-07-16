@@ -6,7 +6,7 @@ import { randomBytes } from "crypto";
 import { importHolidaysForYear } from "../lib/holidays";
 
 function createClient() {
-  const url = process.env.DATABASE_URL ?? "file:./data/sanitaetsplaner.db";
+  const url = process.env.DATABASE_URL ?? "file:./data/DutyRoster.db";
   const dbPath = url.replace(/^file:/, "");
   const adapter = new PrismaBetterSqlite3({ url: dbPath });
   return new PrismaClient({ adapter });

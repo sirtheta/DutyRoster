@@ -23,7 +23,7 @@
 * **security:** remediate all findings from the security review  ([#6](https://github.com/sirtheta/DutyRoster/issues/6)) ([9c987fe](https://github.com/sirtheta/DutyRoster/commit/9c987fe16bfa1bdaa224482659333856d8024876))
 * update dashboard chart ([bf86009](https://github.com/sirtheta/DutyRoster/commit/bf86009908678c0fd469bccadd40a08b5e9e11d2))
 
-## [0.2.0](https://github.com/sirtheta/DutyRoster/compare/Sanitaetsplaner.web-vv0.1.0...Sanitaetsplaner.web-vv0.2.0) (2026-07-15)
+## [0.2.0](https://github.com/sirtheta/DutyRoster/compare/DutyRoster.web-vv0.1.0...DutyRoster.web-vv0.2.0) (2026-07-15)
 
 
 ### Features

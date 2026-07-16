@@ -32,12 +32,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const [y, m, d] = e.date.split("-").map(Number);
     const [ey, em, ed] = addDays(e.date, 1).split("-").map(Number);
     return {
-      uid: `entry-${e.id}@sanitaetsplaner`,
+      uid: `entry-${e.id}@DutyRoster`,
       title: `${e.type} – ${TYPE_INFO[e.type].label}`,
       start: [y, m, d],
       end: [ey, em, ed],
       startInputType: "local",
-      productId: "sanitaetsplaner/ics",
+      productId: "DutyRoster/ics",
     };
   });
 
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   return new NextResponse(value, {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
-      "Content-Disposition": `inline; filename="sanitaetsplaner-${user.name}.ics"`,
+      "Content-Disposition": `inline; filename="DutyRoster-${user.name}.ics"`,
       "Cache-Control": "private, max-age=1800",
     },
   });

@@ -7,7 +7,7 @@ const crypto = require('node:crypto');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 
-const dbPath = (process.env.DATABASE_URL ?? 'file:/app/data/sanitaetsplaner.db')
+const dbPath = (process.env.DATABASE_URL ?? 'file:/app/data/DutyRoster.db')
   .replace(/^file:/, '');
 const dataDir = path.dirname(dbPath);
 

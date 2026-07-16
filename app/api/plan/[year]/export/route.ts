@@ -93,7 +93,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   return new NextResponse(buffer, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="sanitaetsplaner-${year}.xlsx"`,
+      "Content-Disposition": `attachment; filename="DutyRoster-${year}.xlsx"`,
     },
   });
 }

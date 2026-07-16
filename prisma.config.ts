@@ -7,6 +7,6 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env.DATABASE_URL ?? "file:./data/sanitaetsplaner.db",
+    url: process.env.DATABASE_URL ?? "file:./data/DutyRoster.db",
   },
 });

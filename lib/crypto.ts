@@ -6,7 +6,7 @@ const log = logger.child({ module: "crypto" });
 const PREFIX = "enc:v1:";
 // Static application salt: the input (ENCRYPTION_KEY) is itself high-entropy,
 // the salt only prevents key reuse across applications.
-const KEY_SALT = "sanitaetsplaner-secret-encryption-v1";
+const KEY_SALT = "DutyRoster-secret-encryption-v1";
 
 let cachedKey: Buffer | null = null;
 

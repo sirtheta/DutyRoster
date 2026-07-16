@@ -83,7 +83,7 @@ npx vitest run tests/unit/rotation.test.ts
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | No | SQLite path, defaults to `file:./data/sanitaetsplaner.db` |
+| `DATABASE_URL` | No | SQLite path, defaults to `file:./data/DutyRoster.db` |
 | `AUTH_SECRET` | Production only | NextAuth JWT signing key (min 32 chars); in Docker auto-generated on first start and persisted in the data volume if unset |
 | `AUTH_URL` | Production only | Full URL for auth redirects |
 | `ENCRYPTION_KEY` | Production only | 32-byte hex key for encrypting SMTP/Telegram secrets at rest; in Docker auto-generated on first start and persisted in the data volume if unset |
@@ -117,7 +117,7 @@ The scope is optional but encouraged, e.g. `feat(rotation): skip fully-holiday w
 
 ## CI/CD
 
-The **`web.yml`** GitHub Actions workflow triggers on pushes/PRs to `main` (ignoring doc-only changes). It runs ESLint, then Vitest with coverage, then a production build. On push to `main`, `release-please` opens/updates a release PR (tags as `DutyRoster-v<version>`); once a release is created (or on manual `workflow_dispatch`), the job builds and pushes a Docker image to `ghcr.io/sirtheta/sanitaetsplaner` (ARM64 target).
+The **`web.yml`** GitHub Actions workflow triggers on pushes/PRs to `main` (ignoring doc-only changes). It runs ESLint, then Vitest with coverage, then a production build. On push to `main`, `release-please` opens/updates a release PR (tags as `DutyRoster-v<version>`); once a release is created (or on manual `workflow_dispatch`), the job builds and pushes a Docker image to `ghcr.io/sirtheta/duty-roster` (ARM64 target).
 
 Versioning is managed by `release-please` (config: `release-please-config.json`, manifest: `.release-please-manifest.json`).
 

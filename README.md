@@ -64,7 +64,7 @@ Die wichtigsten Umgebungsvariablen (vollständige Liste in `.env.example`):
 
 | Variable | Erforderlich | Beschreibung |
 |---|---|---|
-| `DATABASE_URL` | Nein | SQLite-Pfad, Standard: `file:./data/sanitaetsplaner.db` |
+| `DATABASE_URL` | Nein | SQLite-Pfad, Standard: `file:./data/DutyRoster.db` |
 | `AUTH_SECRET` | Nur Produktion | Signaturschlüssel für NextAuth-JWTs (min. 32 Zeichen) |
 | `AUTH_URL` | Nur Produktion | Vollständige URL für Auth-Redirects |
 | `ENCRYPTION_KEY` | Nur Produktion | 32-Byte-Hex-Schlüssel zur Verschlüsselung von SMTP-/Telegram-Zugangsdaten |
