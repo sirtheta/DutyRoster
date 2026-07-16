@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.3.0...DutyRoster-v0.4.0) (2026-07-16)
+
+
+### Features
+
+* **calendar:** add realtime sync via SSE and harden concurrent duty moves ([1c7f6c3](https://github.com/sirtheta/DutyRoster/commit/1c7f6c3c8277241dc13ecbdd2ed1b3b26c25497d))
+
+
+### Bug Fixes
+
+* allow editor to move and edit other users planing (only S) ([0d69970](https://github.com/sirtheta/DutyRoster/commit/0d699707626e104e10f8a74c190f3d8f3bd0b3fa))
+* **auth:** repair logout and add password visibility toggle + self-service change ([306989a](https://github.com/sirtheta/DutyRoster/commit/306989ad5234681d51276a77832a989e322ae306))
+* **calendar:** stop legend toolbar from reflowing during cell selection ([5ed76bc](https://github.com/sirtheta/DutyRoster/commit/5ed76bcd9141b2a2a91fe5f429dbfbeec3306b8c))
+* renaming ([50cfb5f](https://github.com/sirtheta/DutyRoster/commit/50cfb5f94bd77b38a2b28802b00be971f152c653))
+
 ## [0.3.0](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.2.0...DutyRoster-v0.3.0) (2026-07-16)
 
 
