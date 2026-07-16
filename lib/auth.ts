@@ -86,9 +86,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.roleCheckedAt = Date.now();
         return token;
       }
-      // Re-validate role/isActive against the DB so demotion or deactivation
-      // takes effect within a minute instead of only at JWT expiry (8h).
-      // Returning null invalidates the session.
+      // Re-validate against the DB so demotion, deactivation, or a profile
+      // edit (name/email) takes effect within a minute instead of only at
+      // JWT expiry (8h) / next login. Returning null invalidates the session.
       const ROLE_RECHECK_MS = 60_000;
       const checkedAt = typeof token.roleCheckedAt === "number" ? token.roleCheckedAt : 0;
       if (Date.now() - checkedAt > ROLE_RECHECK_MS) {
@@ -96,13 +96,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!Number.isInteger(userId)) return null;
         const dbUser = await prisma.user.findUnique({
           where: { id: userId },
-          select: { role: true, isActive: true },
+          select: { role: true, isActive: true, name: true, email: true },
         });
         if (!dbUser || !dbUser.isActive) {
           log.info({ userId: token.id }, "session invalidated: user missing or inactive");
           return null;
         }
         token.role = dbUser.role;
+        token.name = dbUser.name;
+        token.email = dbUser.email;
         token.roleCheckedAt = Date.now();
       }
       return token;
@@ -110,6 +112,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       session.user.id = token.id as string;
       session.user.role = token.role as UserRole;
+      session.user.name = token.name as string;
+      session.user.email = token.email as string;
       return session;
     },
   },
