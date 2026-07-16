@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseDate, toDateString, addDays, datesOfYear, weekday, isWeekend } from "@/lib/date";
+import { parseDate, toDateString, addDays, datesOfYear, weekday, isWeekend, weekdayAbbr, formatDateCH } from "@/lib/date";
 
 describe("date helpers", () => {
   it("parses YYYY-MM-DD as local midnight", () => {
@@ -37,5 +37,25 @@ describe("date helpers", () => {
     expect(weekday("2026-01-04")).toBe(0);
     expect(isWeekend("2026-01-04")).toBe(true);
     expect(isWeekend("2026-01-05")).toBe(false);
+  });
+
+  it("parseDate returns undefined for empty/malformed input", () => {
+    expect(parseDate(undefined)).toBeUndefined();
+    expect(parseDate("")).toBeUndefined();
+    expect(parseDate("not-a-date")).toBeUndefined();
+  });
+
+  it("addDays returns the input unchanged when it can't be parsed", () => {
+    expect(addDays("not-a-date", 5)).toBe("not-a-date");
+  });
+
+  it("formatDateCH formats YYYY-MM-DD as DD.MM.YYYY", () => {
+    expect(formatDateCH("2026-03-05")).toBe("05.03.2026");
+  });
+
+  it("weekdayAbbr returns the German two-letter abbreviation", () => {
+    expect(weekdayAbbr("2026-01-03")).toBe("Sa");
+    expect(weekdayAbbr("2026-01-04")).toBe("So");
+    expect(weekdayAbbr("2026-01-05")).toBe("Mo");
   });
 });
