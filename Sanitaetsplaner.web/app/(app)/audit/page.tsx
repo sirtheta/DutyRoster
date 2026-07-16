@@ -16,19 +16,22 @@ const ACTIONS: AuditAction[] = ["CREATE", "UPDATE", "DELETE", "MOVE", "AUTOMATIC
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: Promise<{ entityType?: string; action?: string; userId?: string; page?: string }>;
+  searchParams: Promise<{ entityType?: string; action?: string; userId?: string; year?: string; page?: string }>;
 }) {
   await requireAdmin();
-  const { entityType, action, userId, page: pageParam } = await searchParams;
+  const { entityType, action, userId, year, page: pageParam } = await searchParams;
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
 
   const where = {
     ...(entityType ? { entityType } : {}),
     ...(action ? { action } : {}),
     ...(userId ? { userId: parseInt(userId, 10) } : {}),
+    ...(year
+      ? { createdAt: { gte: new Date(`${year}-01-01T00:00:00`), lt: new Date(`${Number(year) + 1}-01-01T00:00:00`) } }
+      : {}),
   };
 
-  const [logs, total, users] = await Promise.all([
+  const [logs, total, users, oldestLog] = await Promise.all([
     prisma.auditLog.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -37,16 +40,22 @@ export default async function AuditPage({
     }),
     prisma.auditLog.count({ where }),
     prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.auditLog.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
   ]);
 
   const userNames = new Map(users.map((u) => [u.id, u.name]));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const currentYear = new Date().getFullYear();
+  const firstYear = oldestLog ? oldestLog.createdAt.getFullYear() : currentYear;
+  const years = Array.from({ length: currentYear - firstYear + 1 }, (_, i) => currentYear - i);
 
   function pageHref(p: number) {
     const params = new URLSearchParams();
     if (entityType) params.set("entityType", entityType);
     if (action) params.set("action", action);
     if (userId) params.set("userId", userId);
+    if (year) params.set("year", year);
     params.set("page", String(p));
     return `/audit?${params.toString()}`;
   }
@@ -59,6 +68,7 @@ export default async function AuditPage({
         entityTypes={ENTITY_TYPES.map((e) => ({ value: e, label: entityLabel(e) }))}
         actions={ACTIONS.map((a) => ({ value: a, label: actionLabel(a) }))}
         users={users}
+        years={years}
       />
 
       <Table>

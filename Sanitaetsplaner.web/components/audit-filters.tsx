@@ -9,10 +9,12 @@ export function AuditFilters({
   entityTypes,
   actions,
   users,
+  years,
 }: {
   entityTypes: { value: string; label: string }[];
   actions: { value: string; label: string }[];
   users: { id: number; name: string }[];
+  years: number[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -28,6 +30,20 @@ export function AuditFilters({
 
   return (
     <div className="flex flex-wrap gap-2">
+      <Select value={searchParams.get("year") ?? ALL} onValueChange={(v) => setParam("year", v)}>
+        <SelectTrigger className="w-32">
+          <SelectValue placeholder="Jahr" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>Alle Jahre</SelectItem>
+          {years.map((y) => (
+            <SelectItem key={y} value={String(y)}>
+              {y}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
       <Select value={searchParams.get("entityType") ?? ALL} onValueChange={(v) => setParam("entityType", v)}>
         <SelectTrigger className="w-44">
           <SelectValue placeholder="Objekt" />
