@@ -32,12 +32,11 @@ Die einfachste Art, den Sanitätsplaner zu betreiben:
 docker compose up -d
 ```
 
-Die Anwendung ist danach unter `http://localhost:3000` erreichbar. Für einen produktiven Einsatz sollten eigene Werte für `AUTH_SECRET`, `ENCRYPTION_KEY` und `AUTH_URL` per `.env`-Datei gesetzt werden (siehe `Sanitaetsplaner.web/.env.example`).
+Die Anwendung ist danach unter `http://localhost:3000` erreichbar. Für einen produktiven Einsatz sollten eigene Werte für `AUTH_SECRET`, `ENCRYPTION_KEY` und `AUTH_URL` per `.env`-Datei gesetzt werden (siehe `.env.example`).
 
 ## Lokale Entwicklung
 
 ```bash
-cd Sanitaetsplaner.web
 npm install
 npx prisma migrate dev
 npm run dev
@@ -61,7 +60,7 @@ npm run test:integration   # Nur Integrationstests
 
 ## Konfiguration
 
-Die wichtigsten Umgebungsvariablen (vollständige Liste in `Sanitaetsplaner.web/.env.example`):
+Die wichtigsten Umgebungsvariablen (vollständige Liste in `.env.example`):
 
 | Variable | Erforderlich | Beschreibung |
 |---|---|---|
@@ -78,7 +77,6 @@ Die wichtigsten Umgebungsvariablen (vollständige Liste in `Sanitaetsplaner.web/
 ## Projektstruktur
 
 ```
-Sanitaetsplaner.web/
 ├── app/
 │   ├── (auth)/       # Öffentliche Routen (Login)
 │   ├── (app)/         # Geschützte Routen (Kalender, Dashboard, Feiertage, Einstellungen, Benutzer)

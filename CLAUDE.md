@@ -10,7 +10,7 @@ The UI, user-facing text, and documentation are **in German**.
 
 ---
 
-## Web Application (`Sanitaetsplaner.web/`)
+## Web Application (repo root)
 
 ### Commands
 
@@ -117,7 +117,7 @@ The scope is optional but encouraged, e.g. `feat(rotation): skip fully-holiday w
 
 ## CI/CD
 
-The **`web.yml`** GitHub Actions workflow triggers on changes to `Sanitaetsplaner.web/**`. It runs ESLint, then Vitest with coverage, then a production build. On push to `main`, `release-please` opens/updates a release PR; once a release is created (or on manual `workflow_dispatch`), the job builds and pushes a Docker image to `ghcr.io/sirtheta/sanitaetsplaner` (ARM64 target).
+The **`web.yml`** GitHub Actions workflow triggers on pushes/PRs to `main` (ignoring doc-only changes). It runs ESLint, then Vitest with coverage, then a production build. On push to `main`, `release-please` opens/updates a release PR (tags as `DutyRoster-v<version>`); once a release is created (or on manual `workflow_dispatch`), the job builds and pushes a Docker image to `ghcr.io/sirtheta/sanitaetsplaner` (ARM64 target).
 
 Versioning is managed by `release-please` (config: `release-please-config.json`, manifest: `.release-please-manifest.json`).
 

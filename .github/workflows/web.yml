@@ -3,14 +3,16 @@ name: Web CI/CD
 on:
   push:
     branches: [main]
-    paths:
-      - Sanitaetsplaner.web/**
-      - .github/workflows/web.yml
+    paths-ignore:
+      - '**.md'
+      - '.github/dependabot.yml'
+      - 'LICENSE'
   pull_request:
     branches: [main]
-    paths:
-      - Sanitaetsplaner.web/**
-      - .github/workflows/web.yml
+    paths-ignore:
+      - '**.md'
+      - '.github/dependabot.yml'
+      - 'LICENSE'
   workflow_dispatch:
 
 jobs:
@@ -23,11 +25,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: Sanitaetsplaner.web/package-lock.json
-      - working-directory: Sanitaetsplaner.web
-        run: npm ci
-      - working-directory: Sanitaetsplaner.web
-        run: npm run lint
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run lint
 
   test-and-build:
     name: Test & Build
@@ -38,19 +38,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: Sanitaetsplaner.web/package-lock.json
-      - working-directory: Sanitaetsplaner.web
-        run: npm ci
+          cache-dependency-path: package-lock.json
+      - run: npm ci
       - name: Tests mit Coverage ausführen
-        working-directory: Sanitaetsplaner.web
         run: npm run test:coverage
       - uses: actions/upload-artifact@v7
         with:
           name: coverage-report
-          path: Sanitaetsplaner.web/coverage
+          path: coverage
           retention-days: 14
       - name: Build ausführen
-        working-directory: Sanitaetsplaner.web
         run: npm run build
 
   release-please:
@@ -62,8 +59,8 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
-      release_created: ${{ steps.release.outputs['Sanitaetsplaner.web--release_created'] }}
-      tag_name: ${{ steps.release.outputs['Sanitaetsplaner.web--tag_name'] }}
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
@@ -99,7 +96,7 @@ jobs:
           REPO="ghcr.io/${{ github.repository_owner }}/sanitaetsplaner"
           TAG_NAME="${{ needs.release-please.outputs.tag_name }}"
           if [[ -n "$TAG_NAME" ]]; then
-            VERSION="${TAG_NAME#web-v}"
+            VERSION="${TAG_NAME#DutyRoster-v}"
             echo "tags=${REPO}:${VERSION},${REPO}:latest" >> $GITHUB_OUTPUT
           else
             echo "tags=${REPO}:latest,${REPO}:${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
@@ -107,7 +104,7 @@ jobs:
       - name: Image bauen und pushen
         uses: docker/build-push-action@v7
         with:
-          context: Sanitaetsplaner.web
+          context: .
           platforms: linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}

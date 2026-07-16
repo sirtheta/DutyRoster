@@ -1,7 +1,7 @@
 services:
   app:
-    image: ghcr.io/sirtheta/sanitaetsplaner:latest
-    container_name: sanitaetsplaner
+    image: ghcr.io/sirtheta/duty-roster:latest
+    container_name: duty-roster
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -11,7 +11,7 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: "file:/app/data/sanitaetsplaner.db"
+      DATABASE_URL: "file:/app/data/dutyroster.db"
       NODE_ENV: production
       # `docker compose up` works without a .env file: when AUTH_SECRET /
       # ENCRYPTION_KEY are not provided, the container generates random ones

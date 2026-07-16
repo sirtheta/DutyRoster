@@ -9,7 +9,7 @@ export function hasRole(session: Session, roles: UserRole[]): boolean {
 
 export async function requireRole(roles: UserRole[]): Promise<Session> {
   const session = await auth();
-  if (!session) redirect("/login");
+  if (!session?.user) redirect("/login");
   if (!roles.includes(session.user.role)) redirect("/calendar");
   return session;
 }
