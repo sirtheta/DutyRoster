@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { EntryType } from "@prisma/client";
+import { EntryType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAdmin, requireEditor } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { runRotation } from "@/lib/rotation";
 import { holidaySetForYear } from "@/lib/holidays";
 import { isWeekend, parseDate, toDateString } from "@/lib/date";
+import { notifyCalendarChange } from "@/lib/calendar-events";
 
 export type Assignment = { date: string; userId: number };
 
@@ -114,6 +115,7 @@ export async function upsertEntryAction(rawInput: {
   }
 
   revalidatePath(`/calendar/${input.date.slice(0, 4)}`);
+  notifyCalendarChange(input.date.slice(0, 4));
   return {};
 }
 
@@ -184,6 +186,7 @@ export async function bulkSetEntriesAction(
 
   for (const year of new Set(allowed.map((c) => c.date.slice(0, 4)))) {
     revalidatePath(`/calendar/${year}`);
+    notifyCalendarChange(year);
   }
   return { count };
 }
@@ -204,40 +207,56 @@ export async function moveEntryAction(rawInput: {
     return { error: "Kein Dienst an Wochenenden." };
   }
 
-  const source = await prisma.entry.findUnique({
-    where: { userId_date: { userId: input.fromUserId, date: input.fromDate } },
-  });
-  if (!source || source.type !== "S") {
-    return { error: "Nur S-Dienste können verschoben werden." };
+  let sourceId: number;
+  try {
+    sourceId = await prisma.$transaction(async (tx) => {
+      // Re-checked inside the transaction (not just before it) so a
+      // concurrent move can't slip into the gap between the check and the
+      // write; the unique (userId, date) constraint is the final backstop
+      // if it still does.
+      const source = await tx.entry.findUnique({
+        where: { userId_date: { userId: input.fromUserId, date: input.fromDate } },
+      });
+      if (!source || source.type !== "S") {
+        throw new Error("Nur S-Dienste können verschoben werden.");
+      }
+
+      const destExisting = await tx.entry.findUnique({
+        where: { userId_date: { userId: input.toUserId, date: input.toDate } },
+      });
+      if (destExisting) {
+        throw new Error("Zielzelle ist bereits belegt.");
+      }
+
+      await tx.entry.delete({ where: { id: source.id } });
+      await tx.entry.create({
+        data: {
+          userId: input.toUserId,
+          date: input.toDate,
+          type: "S",
+          source: "Swap",
+          comment: source.comment,
+        },
+      });
+      return source.id;
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { error: "Zielzelle ist bereits belegt." };
+    }
+    if (err instanceof Error) return { error: err.message };
+    throw err;
   }
 
-  const destExisting = await prisma.entry.findUnique({
-    where: { userId_date: { userId: input.toUserId, date: input.toDate } },
-  });
-  if (destExisting) {
-    return { error: "Zielzelle ist bereits belegt." };
-  }
-
-  await prisma.$transaction([
-    prisma.entry.delete({ where: { id: source.id } }),
-    prisma.entry.create({
-      data: {
-        userId: input.toUserId,
-        date: input.toDate,
-        type: "S",
-        source: "Swap",
-        comment: source.comment,
-      },
-    }),
-  ]);
-
-  await logAudit(session, "MOVE", "Entry", source.id, {
+  await logAudit(session, "MOVE", "Entry", sourceId, {
     from: { userId: input.fromUserId, date: input.fromDate },
     to: { userId: input.toUserId, date: input.toDate },
   });
 
-  revalidatePath(`/calendar/${input.fromDate.slice(0, 4)}`);
-  revalidatePath(`/calendar/${input.toDate.slice(0, 4)}`);
+  for (const year of new Set([input.fromDate.slice(0, 4), input.toDate.slice(0, 4)])) {
+    revalidatePath(`/calendar/${year}`);
+    notifyCalendarChange(year);
+  }
   return {};
 }
 
@@ -263,44 +282,57 @@ export async function moveEntriesAction(
     return { error: "Mehrere Dienste können nicht auf dieselbe Zielzelle verschoben werden." };
   }
 
-  const sources = await prisma.entry.findMany({
-    where: { OR: moves.map((m) => ({ userId: m.fromUserId, date: m.fromDate })) },
-  });
-  const sourceMap = new Map(sources.map((s) => [`${s.userId}-${s.date}`, s]));
-  for (const m of moves) {
-    const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`);
-    if (!s || s.type !== "S") {
-      return { error: "Nur S-Dienste können verschoben werden." };
-    }
-  }
+  const sourceKeys = new Set(moves.map((m) => `${m.fromUserId}-${m.fromDate}`));
 
-  // A destination is fine if it's empty, or if it's only occupied by one of
-  // the entries in this same batch (which will be vacated by this move).
-  const sourceKeys = new Set(sourceMap.keys());
-  const destinations = await prisma.entry.findMany({
-    where: { OR: moves.map((m) => ({ userId: m.toUserId, date: m.toDate })) },
-  });
-  for (const d of destinations) {
-    if (!sourceKeys.has(`${d.userId}-${d.date}`)) {
+  try {
+    // Sources/destinations are (re-)checked inside the transaction, not just
+    // before it, so a concurrent move can't slip into the gap between the
+    // check and the write; the unique (userId, date) constraint (caught as
+    // P2002 below) is the final backstop if it still does.
+    await prisma.$transaction(async (tx) => {
+      const sources = await tx.entry.findMany({
+        where: { OR: moves.map((m) => ({ userId: m.fromUserId, date: m.fromDate })) },
+      });
+      const sourceMap = new Map(sources.map((s) => [`${s.userId}-${s.date}`, s]));
+      for (const m of moves) {
+        const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`);
+        if (!s || s.type !== "S") {
+          throw new Error("Nur S-Dienste können verschoben werden.");
+        }
+      }
+
+      // A destination is fine if it's empty, or if it's only occupied by one
+      // of the entries in this same batch (which will be vacated by this move).
+      const destinations = await tx.entry.findMany({
+        where: { OR: moves.map((m) => ({ userId: m.toUserId, date: m.toDate })) },
+      });
+      for (const d of destinations) {
+        if (!sourceKeys.has(`${d.userId}-${d.date}`)) {
+          throw new Error("Zielzelle ist bereits belegt.");
+        }
+      }
+
+      // Delete all sources before creating any destination so overlapping
+      // moves (shifts/swaps within the same batch) don't hit the unique
+      // (userId, date) constraint mid-transaction.
+      for (const m of moves) {
+        const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`)!;
+        await tx.entry.delete({ where: { id: s.id } });
+      }
+      for (const m of moves) {
+        const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`)!;
+        await tx.entry.create({
+          data: { userId: m.toUserId, date: m.toDate, type: "S", source: "Swap", comment: s.comment },
+        });
+      }
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       return { error: "Zielzelle ist bereits belegt." };
     }
+    if (err instanceof Error) return { error: err.message };
+    throw err;
   }
-
-  // Delete all sources before creating any destination so overlapping
-  // moves (shifts/swaps within the same batch) don't hit the unique
-  // (userId, date) constraint mid-transaction.
-  await prisma.$transaction(async (tx) => {
-    for (const m of moves) {
-      const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`)!;
-      await tx.entry.delete({ where: { id: s.id } });
-    }
-    for (const m of moves) {
-      const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`)!;
-      await tx.entry.create({
-        data: { userId: m.toUserId, date: m.toDate, type: "S", source: "Swap", comment: s.comment },
-      });
-    }
-  });
 
   await logAudit(session, "MOVE", "Entry", undefined, { bulk: true, count: moves.length, moves });
 
@@ -309,7 +341,10 @@ export async function moveEntriesAction(
     years.add(m.fromDate.slice(0, 4));
     years.add(m.toDate.slice(0, 4));
   }
-  for (const year of years) revalidatePath(`/calendar/${year}`);
+  for (const year of years) {
+    revalidatePath(`/calendar/${year}`);
+    notifyCalendarChange(year);
+  }
 
   return { count: moves.length };
 }
@@ -361,5 +396,6 @@ export async function generateAutomationAction(rawYear: number): Promise<{ count
 
   await logAudit(session, "AUTOMATIC", "Entry", undefined, { year, count });
   revalidatePath(`/calendar/${year}`);
+  notifyCalendarChange(year);
   return { count };
 }

@@ -209,6 +209,15 @@ export function CalendarGrid({
     setActiveTool((prev) => (prev === "DELETE" ? null : "DELETE"));
   }
 
+  // Live sync: other users' mutations for this year arrive as SSE "change"
+  // events (see app/api/calendar/[year]/stream), so we just refetch server
+  // data instead of reconciling anything client-side.
+  useEffect(() => {
+    const source = new EventSource(`/api/calendar/${year}/stream`);
+    source.onmessage = () => router.refresh();
+    return () => source.close();
+  }, [year, router]);
+
   useEffect(() => {
     function handleDocMouseDown(e: MouseEvent) {
       const target = e.target as Node;
