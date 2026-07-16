@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import cron from "node-cron";
 import { createTestDatabase, createTestUser } from "../test-utils";
 import { queueDueNotifications, dispatchPendingNotifications } from "@/lib/notifications";
 
@@ -9,11 +10,15 @@ vi.mock("nodemailer", () => ({
   default: { createTransport: vi.fn(() => ({ sendMail: mockSendMail })) },
 }));
 
-describe("notifications", () => {
-  const db = createTestDatabase();
+const db = createTestDatabase();
+vi.mock("@/lib/prisma", () => ({ get default() { return db.prisma; } }));
 
+describe("notifications", () => {
   beforeEach(() => {
     mockSendMail.mockClear();
+    vi.mocked(cron.schedule).mockClear();
+    vi.mocked(cron.validate).mockClear().mockReturnValue(true);
+    delete (globalThis as unknown as { notificationSchedulerStarted?: boolean }).notificationSchedulerStarted;
   });
 
   it("queues a notification only for users due this hour with an S-Dienst this week", async () => {
@@ -100,5 +105,65 @@ describe("notifications", () => {
     expect(updated.sentAt).toBeNull();
     expect(updated.failedAt).not.toBeNull();
     expect(updated.error).toBeTruthy();
+  });
+
+  it("does nothing when there is no SystemSettings row", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser() });
+    const notification = await prisma.pendingNotification.create({
+      data: { userId: user.id, channel: "Email", subject: "Test", body: "Hallo" },
+    });
+
+    await dispatchPendingNotifications(prisma);
+
+    const updated = await prisma.pendingNotification.findUniqueOrThrow({ where: { id: notification.id } });
+    expect(updated.sentAt).toBeNull();
+    expect(updated.failedAt).toBeNull();
+  });
+
+  it("marks a Telegram notification as failed when the user has no telegramChatId", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ telegramChatId: null }) });
+    await prisma.systemSettings.create({ data: { id: 1 } });
+    const notification = await prisma.pendingNotification.create({
+      data: { userId: user.id, channel: "Telegram", subject: "Test", body: "Hallo" },
+    });
+
+    await dispatchPendingNotifications(prisma);
+
+    const updated = await prisma.pendingNotification.findUniqueOrThrow({ where: { id: notification.id } });
+    expect(updated.sentAt).toBeNull();
+    expect(updated.failedAt).not.toBeNull();
+    expect(updated.error).toContain("telegramChatId");
+  });
+
+  it("does not register a cron job when the schedule is invalid", async () => {
+    vi.mocked(cron.validate).mockReturnValueOnce(false);
+    const { startNotificationScheduler } = await import("@/lib/notifications");
+
+    startNotificationScheduler();
+
+    expect(cron.schedule).not.toHaveBeenCalled();
+  });
+
+  it("registers an hourly cron job that runs the notification pipeline once", async () => {
+    const { startNotificationScheduler } = await import("@/lib/notifications");
+
+    startNotificationScheduler();
+    startNotificationScheduler(); // second call is a no-op (already started)
+
+    expect(cron.schedule).toHaveBeenCalledTimes(1);
+    const callback = vi.mocked(cron.schedule).mock.calls[0][1] as () => Promise<void>;
+    await expect(callback()).resolves.toBeUndefined();
+  });
+
+  it("logs and swallows an error thrown inside the scheduled job", async () => {
+    const { startNotificationScheduler } = await import("@/lib/notifications");
+    startNotificationScheduler();
+    const callback = vi.mocked(cron.schedule).mock.calls[0][1] as () => Promise<void>;
+
+    const spy = vi.spyOn(db.prisma.user, "findMany").mockRejectedValueOnce(new Error("boom"));
+    await expect(callback()).resolves.toBeUndefined();
+    spy.mockRestore();
   });
 });
