@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/sirtheta/DutyRoster/compare/Sanitaetsplaner.web-vv0.2.0...Sanitaetsplaner.web-vv0.3.0) (2026-07-16)
+
+
+### Features
+
+* **audit:** add admin audit-log page ([#7](https://github.com/sirtheta/DutyRoster/issues/7)) ([2603680](https://github.com/sirtheta/DutyRoster/commit/260368020d63b481080d96ecfc61c77a33d8d9bf))
+
+
+### Bug Fixes
+
+* **security:** remediate all findings from the security review  ([#6](https://github.com/sirtheta/DutyRoster/issues/6)) ([9c987fe](https://github.com/sirtheta/DutyRoster/commit/9c987fe16bfa1bdaa224482659333856d8024876))
+
 ## [0.2.0](https://github.com/sirtheta/DutyRoster/compare/Sanitaetsplaner.web-vv0.1.0...Sanitaetsplaner.web-vv0.2.0) (2026-07-15)
 
 
