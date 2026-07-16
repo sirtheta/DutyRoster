@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomBytes } from "crypto";
 import { hash } from "bcryptjs";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
@@ -50,7 +51,13 @@ export async function createUserAction(
 
   try {
     const user = await prisma.user.create({
-      data: { ...parsed.data, passwordHash: await hash(password, bcryptRounds) },
+      data: {
+        ...parsed.data,
+        passwordHash: await hash(password, bcryptRounds),
+        // Explicit CSPRNG token instead of the schema's cuid() default,
+        // which is not designed to be an unguessable bearer credential.
+        icalToken: randomBytes(32).toString("base64url"),
+      },
     });
     await logAudit(session, "CREATE", "User", user.id, { email: user.email });
   } catch {

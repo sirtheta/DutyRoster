@@ -3,11 +3,23 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { addDays } from "@/lib/date";
 import { TYPE_INFO } from "@/lib/entry-types";
+import { isRateLimited, recordFailedAttempt } from "@/lib/rate-limit";
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+// Throttles token guessing: only FAILED lookups count against the limit, so
+// legitimate calendar clients polling a valid token are never rate-limited.
+const ICAL_LIMIT = { maxAttempts: 10, windowMs: 15 * 60 * 1000 };
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const rateKey = `ical:${ip}`;
+  if (isRateLimited(rateKey, ICAL_LIMIT)) {
+    return NextResponse.json({ error: "Zu viele Anfragen" }, { status: 429 });
+  }
+
   const user = await prisma.user.findUnique({ where: { icalToken: token } });
   if (!user || !user.isActive) {
+    recordFailedAttempt(rateKey, ICAL_LIMIT);
     return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });
   }
 

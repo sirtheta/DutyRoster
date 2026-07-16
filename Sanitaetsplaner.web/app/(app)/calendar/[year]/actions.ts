@@ -1,15 +1,47 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { EntryType } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAdmin, requireEditor } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { runRotation } from "@/lib/rotation";
 import { holidaySetForYear } from "@/lib/holidays";
-import { isWeekend } from "@/lib/date";
+import { isWeekend, parseDate, toDateString } from "@/lib/date";
 
 export type Assignment = { date: string; userId: number };
+
+// Server-action inputs arrive from the network, not just from our UI —
+// validate shape before anything touches the DB.
+const dateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Ungültiges Datum.")
+  .refine(
+    (s) => {
+      const d = parseDate(s);
+      return !!d && toDateString(d) === s; // rejects e.g. 2026-02-31
+    },
+    { message: "Ungültiges Datum." }
+  );
+const commentSchema = z.string().max(500, "Kommentar ist zu lang.").optional();
+const userIdSchema = z.number().int().positive();
+
+const upsertEntrySchema = z.object({
+  userId: userIdSchema,
+  date: dateSchema,
+  type: z.enum(EntryType).nullable(),
+  comment: commentSchema,
+});
+
+const cellsSchema = z.array(z.object({ userId: userIdSchema, date: dateSchema })).max(5000);
+
+const moveSchema = z.object({
+  fromUserId: userIdSchema,
+  fromDate: dateSchema,
+  toUserId: userIdSchema,
+  toDate: dateSchema,
+});
 
 function assertOwnEntry(sessionUserId: string, role: string, targetUserId: number) {
   if (role !== "Admin" && targetUserId !== Number(sessionUserId)) {
@@ -17,13 +49,18 @@ function assertOwnEntry(sessionUserId: string, role: string, targetUserId: numbe
   }
 }
 
-export async function upsertEntryAction(input: {
+export async function upsertEntryAction(rawInput: {
   userId: number;
   date: string;
   type: EntryType | null;
   comment?: string;
 }): Promise<{ error?: string }> {
   const session = await requireEditor();
+  const parsedInput = upsertEntrySchema.safeParse(rawInput);
+  if (!parsedInput.success) {
+    return { error: parsedInput.error.issues[0]?.message ?? "Ungültige Eingabe." };
+  }
+  const input = parsedInput.data;
   try {
     assertOwnEntry(session.user.id, session.user.role, input.userId);
   } catch (err) {
@@ -71,10 +108,17 @@ export async function upsertEntryAction(input: {
 }
 
 export async function bulkSetEntriesAction(
-  cells: { userId: number; date: string }[],
-  type: EntryType | null
+  rawCells: { userId: number; date: string }[],
+  rawType: EntryType | null
 ): Promise<{ count: number; error?: string }> {
   const session = await requireEditor();
+  const parsedCells = cellsSchema.safeParse(rawCells);
+  const parsedType = z.enum(EntryType).nullable().safeParse(rawType);
+  if (!parsedCells.success || !parsedType.success) {
+    return { count: 0, error: "Ungültige Eingabe." };
+  }
+  const cells = parsedCells.data;
+  const type = parsedType.data;
   const role = session.user.role;
   const sessionUserId = Number(session.user.id);
 
@@ -119,13 +163,16 @@ export async function bulkSetEntriesAction(
   return { count };
 }
 
-export async function moveEntryAction(input: {
+export async function moveEntryAction(rawInput: {
   fromUserId: number;
   fromDate: string;
   toUserId: number;
   toDate: string;
 }): Promise<{ error?: string }> {
   const session = await requireEditor();
+  const parsedInput = moveSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { error: "Ungültige Eingabe." };
+  const input = parsedInput.data;
   try {
     assertOwnEntry(session.user.id, session.user.role, input.fromUserId);
   } catch (err) {
@@ -176,9 +223,12 @@ export async function moveEntryAction(input: {
 }
 
 export async function moveEntriesAction(
-  moves: { fromUserId: number; fromDate: string; toUserId: number; toDate: string }[]
+  rawMoves: { fromUserId: number; fromDate: string; toUserId: number; toDate: string }[]
 ): Promise<{ count?: number; error?: string }> {
   const session = await requireEditor();
+  const parsedMoves = z.array(moveSchema).max(5000).safeParse(rawMoves);
+  if (!parsedMoves.success) return { error: "Ungültige Eingabe." };
+  const moves = parsedMoves.data;
   if (moves.length === 0) return { count: 0 };
 
   const role = session.user.role;
@@ -252,8 +302,9 @@ export async function moveEntriesAction(
   return { count: moves.length };
 }
 
-export async function generateAutomationAction(year: number): Promise<{ count: number }> {
+export async function generateAutomationAction(rawYear: number): Promise<{ count: number }> {
   const session = await requireAdmin();
+  const year = z.number().int().min(2000).max(2100).parse(rawYear);
 
   const [users, holidays, existing] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { rotationOrder: "asc" } }),

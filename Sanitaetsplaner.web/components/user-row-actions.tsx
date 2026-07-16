@@ -2,7 +2,6 @@
 
 import { useTransition } from "react";
 import { MoreHorizontal } from "lucide-react";
-import type { User } from "@prisma/client";
 import { toggleActiveAction } from "@/app/(app)/users/actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,9 +10,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UserFormDialog } from "@/components/user-form-dialog";
+import { UserFormDialog, type UserListItem } from "@/components/user-form-dialog";
 
-export function UserRowActions({ user }: { user: User }) {
+export function UserRowActions({ user }: { user: UserListItem }) {
   const [isPending, startTransition] = useTransition();
 
   return (

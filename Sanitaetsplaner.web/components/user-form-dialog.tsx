@@ -3,6 +3,26 @@
 import { useActionState, useState, type ReactNode } from "react";
 import type { User } from "@prisma/client";
 import { createUserAction, updateUserAction } from "@/app/(app)/users/actions";
+
+/**
+ * The subset of `User` the admin UI needs. Deliberately excludes
+ * `passwordHash` and `icalToken`: props of client components are serialized
+ * into the page payload, so secrets must never appear here.
+ */
+export type UserListItem = Pick<
+  User,
+  | "id"
+  | "email"
+  | "name"
+  | "role"
+  | "isActive"
+  | "rotationOrder"
+  | "notifyEnabled"
+  | "notifyChannel"
+  | "notifyWeekday"
+  | "notifyHour"
+  | "telegramChatId"
+>;
 import {
   Dialog,
   DialogContent,
@@ -22,7 +42,7 @@ export function UserFormDialog({
   trigger,
 }: {
   mode: "create" | "edit";
-  user?: User;
+  user?: UserListItem;
   trigger: ReactNode;
 }) {
   const [open, setOpen] = useState(false);

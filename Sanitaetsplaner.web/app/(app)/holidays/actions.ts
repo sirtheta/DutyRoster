@@ -93,8 +93,10 @@ export async function deleteHolidaysAction(ids: number[]): Promise<void> {
   revalidatePath("/holidays");
 }
 
-export async function importHolidaysAction(year: number, canton: string): Promise<{ count: number }> {
+export async function importHolidaysAction(rawYear: number, rawCanton: string): Promise<{ count: number }> {
   const session = await requireAdmin();
+  const year = z.number().int().min(2000).max(2100).parse(rawYear);
+  const canton = z.string().regex(/^[A-Z]{2}$/, "Ungültiger Kanton.").parse(rawCanton);
   const count = await importHolidaysForYear(year, canton);
   await logAudit(session, "CREATE", "Holiday", undefined, { year, canton, count });
   revalidatePath("/holidays");

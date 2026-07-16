@@ -273,6 +273,34 @@ describe("calendar actions", () => {
     expect(adminEntries).toHaveLength(0);
   });
 
+  it("rejects malformed and impossible dates", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { upsertEntryAction } = await import("@/app/(app)/calendar/[year]/actions");
+    for (const date of ["not-a-date", "2026-02-31", "2026-13-01", "2026-05-04'; --"]) {
+      const res = await upsertEntryAction({ userId: user.id, date, type: "F" });
+      expect(res.error).toMatch(/Datum/);
+    }
+    expect(await prisma.entry.count({ where: { userId: user.id } })).toBe(0);
+  });
+
+  it("rejects an over-long comment", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { upsertEntryAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await upsertEntryAction({
+      userId: user.id,
+      date: "2026-05-04",
+      type: "F",
+      comment: "x".repeat(501),
+    });
+    expect(res.error).toMatch(/Kommentar/);
+  });
+
   it("rejects an S-duty entry on a weekend", async () => {
     const { prisma } = db;
     const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });

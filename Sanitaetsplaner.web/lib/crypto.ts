@@ -47,7 +47,13 @@ export function encryptSecret(plain: string): string {
  * callers treat the secret as unset instead of using ciphertext as a credential.
  */
 export function decryptSecret(stored: string): string {
-  if (!stored || !isEncrypted(stored)) return stored;
+  if (!stored) return stored;
+  if (!isEncrypted(stored)) {
+    // Legacy passthrough for rows written before encryption existed. Flag it:
+    // a plaintext credential in the DB should be re-saved (which encrypts it).
+    log.warn("Stored secret is not encrypted — re-save it in the settings to encrypt it at rest");
+    return stored;
+  }
   try {
     const [ivB64, tagB64, dataB64] = stored.slice(PREFIX.length).split(":");
     const decipher = createDecipheriv("aes-256-gcm", getKey(), Buffer.from(ivB64, "base64"));

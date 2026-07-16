@@ -23,15 +23,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "E-Mail", type: "email" },
         password: { label: "Passwort", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
         const { email, password } = parsed.data;
 
-        const rateLimitKey = `login:${email}`;
-        if (!checkRateLimit(rateLimitKey)) {
-          log.warn({ email }, "login blocked: rate limit exceeded");
+        // Normalized only for the rate-limit key (DB lookup stays exact),
+        // so "User@x.ch" and "user@x.ch " share one bucket.
+        const rateLimitKey = `login:${email.trim().toLowerCase()}`;
+        // Broader per-IP bucket: limits spraying many accounts from one IP
+        // without letting one IP lock out a shared office network.
+        const ip =
+          request?.headers?.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+        const ipAllowed = checkRateLimit(`login-ip:${ip}`, {
+          maxAttempts: config.rateLimit.maxAttempts * 10,
+        });
+        if (!checkRateLimit(rateLimitKey) || !ipAllowed) {
+          log.warn({ email, ip }, "login blocked: rate limit exceeded");
           return null;
         }
 
@@ -74,6 +83,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = (user as { role: UserRole }).role;
+        token.roleCheckedAt = Date.now();
+        return token;
+      }
+      // Re-validate role/isActive against the DB so demotion or deactivation
+      // takes effect within a minute instead of only at JWT expiry (8h).
+      // Returning null invalidates the session.
+      const ROLE_RECHECK_MS = 60_000;
+      const checkedAt = typeof token.roleCheckedAt === "number" ? token.roleCheckedAt : 0;
+      if (Date.now() - checkedAt > ROLE_RECHECK_MS) {
+        const userId = parseInt(String(token.id), 10);
+        if (!Number.isInteger(userId)) return null;
+        const dbUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { role: true, isActive: true },
+        });
+        if (!dbUser || !dbUser.isActive) {
+          log.info({ userId: token.id }, "session invalidated: user missing or inactive");
+          return null;
+        }
+        token.role = dbUser.role;
+        token.roleCheckedAt = Date.now();
       }
       return token;
     },

@@ -9,7 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
-export function SettingsForm({ settings }: { settings: SystemSettings | null }) {
+export function SettingsForm({
+  settings,
+}: {
+  settings: Pick<SystemSettings, "smtpHost" | "smtpPort" | "smtpUser" | "smtpFromName"> | null;
+}) {
   const [state, formAction, pending] = useActionState(updateSettingsAction, undefined);
 
   useEffect(() => {

@@ -29,9 +29,15 @@ export default async function DashboardPage({
     return row;
   });
 
-  const host = (await headers()).get("host");
-  const proto = process.env.NODE_ENV === "production" ? "https" : "http";
-  const icalUrl = currentUser ? `${proto}://${host}/api/ical/${currentUser.icalToken}` : "";
+  // Prefer the configured canonical origin; the Host header is only a
+  // fallback for setups without AUTH_URL (it is client-controlled input).
+  let origin = process.env.AUTH_URL?.replace(/\/+$/, "");
+  if (!origin) {
+    const host = (await headers()).get("host");
+    const proto = process.env.NODE_ENV === "production" ? "https" : "http";
+    origin = `${proto}://${host}`;
+  }
+  const icalUrl = currentUser ? `${origin}/api/ical/${currentUser.icalToken}` : "";
 
   return (
     <div className="flex flex-col gap-4">
