@@ -526,60 +526,66 @@ export function CalendarGrid({
           cell clicks are coloured with it directly until it's toggled off. */}
       <div
         ref={toolbarRef}
-        className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-md border bg-background p-2 shadow-sm"
+        className="sticky top-0 z-20 flex flex-col gap-2 rounded-md border bg-background p-2 shadow-sm"
       >
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm tabular-nums text-muted-foreground">
           {selection.size > 0
             ? `${selection.size} Zelle(n) ausgewählt`
-            : activeTool !== null
-              ? "Zellen anklicken zum Einfärben"
-              : "Legende"}
+            : activeTool === "DELETE"
+              ? "Zellen anklicken zum Löschen"
+              : activeTool !== null
+                ? "Zellen anklicken zum Einfärben"
+                : "Legende"}
         </span>
-        {ENTRY_TYPES.map((type) => {
-          const active = activeTool === type;
-          return (
-            <Button
-              key={type}
-              variant="outline"
-              size="sm"
-              disabled={isPending || (type === "S" && hasWeekendSelected)}
-              onClick={() => handleCategoryClick(type)}
-              style={
-                active
-                  ? {
-                      backgroundColor: TYPE_INFO[type].color,
-                      color: TYPE_INFO[type].textColor ?? "#fff",
-                      borderColor: TYPE_INFO[type].color,
-                    }
-                  : { borderColor: TYPE_INFO[type].color, color: TYPE_INFO[type].color }
-              }
-              title={type === "S" && hasWeekendSelected ? "Kein Dienst an Wochenenden." : undefined}
-            >
-              {type} – {TYPE_INFO[type].label}
-            </Button>
-          );
-        })}
-        <Button
-          variant={activeTool === "DELETE" ? "default" : "ghost"}
-          size="sm"
-          disabled={isPending}
-          onClick={handleDeleteToolClick}
-        >
-          Löschen
-        </Button>
-        {(selection.size > 0 || activeTool !== null) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {ENTRY_TYPES.map((type) => {
+            const active = activeTool === type;
+            return (
+              <Button
+                key={type}
+                variant="outline"
+                size="sm"
+                disabled={isPending || (type === "S" && hasWeekendSelected)}
+                onClick={() => handleCategoryClick(type)}
+                style={
+                  active
+                    ? {
+                        backgroundColor: TYPE_INFO[type].color,
+                        color: TYPE_INFO[type].textColor ?? "#fff",
+                        borderColor: TYPE_INFO[type].color,
+                      }
+                    : { borderColor: TYPE_INFO[type].color, color: TYPE_INFO[type].color }
+                }
+                title={type === "S" && hasWeekendSelected ? "Kein Dienst an Wochenenden." : undefined}
+              >
+                {type} – {TYPE_INFO[type].label}
+              </Button>
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <Button
-            variant="ghost"
+            variant={activeTool === "DELETE" ? "default" : "ghost"}
             size="sm"
             disabled={isPending}
-            onClick={() => {
-              clearSelection();
-              setActiveTool(null);
-            }}
+            onClick={handleDeleteToolClick}
           >
-            Abbrechen
+            Löschen
           </Button>
-        )}
+          {(selection.size > 0 || activeTool !== null) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+              onClick={() => {
+                clearSelection();
+                setActiveTool(null);
+              }}
+            >
+              Abbrechen
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Desktop: full year in one scrollable table. */}
