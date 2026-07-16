@@ -6,6 +6,7 @@ import type { SystemSettings } from "@prisma/client";
 import { updateSettingsAction } from "@/app/(app)/settings/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -44,7 +45,7 @@ export function SettingsForm({
             <Label htmlFor="smtpPassword">
               Passwort <span className="text-muted-foreground">(leer lassen = unverändert)</span>
             </Label>
-            <Input id="smtpPassword" name="smtpPassword" type="password" />
+            <PasswordInput id="smtpPassword" name="smtpPassword" />
           </div>
           <div className="col-span-2 flex flex-col gap-2">
             <Label htmlFor="smtpFromName">Absendername</Label>
@@ -62,7 +63,7 @@ export function SettingsForm({
             <Label htmlFor="telegramBotToken">
               Bot-Token <span className="text-muted-foreground">(leer lassen = unverändert)</span>
             </Label>
-            <Input id="telegramBotToken" name="telegramBotToken" type="password" />
+            <PasswordInput id="telegramBotToken" name="telegramBotToken" />
           </div>
         </CardContent>
       </Card>

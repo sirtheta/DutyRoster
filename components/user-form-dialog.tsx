@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 
@@ -86,7 +87,7 @@ export function UserFormDialog({
             <Label htmlFor="password">
               Passwort {mode === "edit" && <span className="text-muted-foreground">(leer lassen = unverändert)</span>}
             </Label>
-            <Input id="password" name="password" type="password" minLength={8} required={mode === "create"} />
+            <PasswordInput id="password" name="password" minLength={8} required={mode === "create"} />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="rotationOrder">Rotations-Reihenfolge</Label>
