@@ -59,6 +59,65 @@ describe("calendar actions", () => {
     expect(entry).toBeNull();
   });
 
+  it("lets an editor create an S-Dienst entry for another user", async () => {
+    const { prisma } = db;
+    const editor = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Editor" }) });
+    const other = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Editor" }) });
+    currentSession = sessionFor(editor.id, "Editor");
+
+    const { upsertEntryAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await upsertEntryAction({ userId: other.id, date: "2026-05-04", type: "S" });
+
+    expect(res.error).toBeUndefined();
+    const entry = await prisma.entry.findUniqueOrThrow({
+      where: { userId_date: { userId: other.id, date: "2026-05-04" } },
+    });
+    expect(entry.type).toBe("S");
+  });
+
+  it("lets an editor clear another user's S-Dienst entry but not their non-Dienst entry", async () => {
+    const { prisma } = db;
+    const editor = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Editor" }) });
+    const other = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Editor" }) });
+    await prisma.entry.create({ data: { userId: other.id, date: "2026-05-04", type: "S" } });
+    await prisma.entry.create({ data: { userId: other.id, date: "2026-05-05", type: "F" } });
+    currentSession = sessionFor(editor.id, "Editor");
+
+    const { upsertEntryAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const clearS = await upsertEntryAction({ userId: other.id, date: "2026-05-04", type: null });
+    expect(clearS.error).toBeUndefined();
+    expect(
+      await prisma.entry.findUnique({ where: { userId_date: { userId: other.id, date: "2026-05-04" } } })
+    ).toBeNull();
+
+    const clearF = await upsertEntryAction({ userId: other.id, date: "2026-05-05", type: null });
+    expect(clearF.error).toMatch(/Berechtigung/);
+    expect(
+      await prisma.entry.findUnique({ where: { userId_date: { userId: other.id, date: "2026-05-05" } } })
+    ).not.toBeNull();
+  });
+
+  it("lets an editor bulk-set S-Dienst for another user but not other entry types", async () => {
+    const { prisma } = db;
+    const editor = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Editor" }) });
+    const other = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Editor" }) });
+    currentSession = sessionFor(editor.id, "Editor");
+
+    const { bulkSetEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const sRes = await bulkSetEntriesAction([{ userId: other.id, date: "2026-05-04" }], "S");
+    expect(sRes.count).toBe(1);
+    expect(
+      (await prisma.entry.findUniqueOrThrow({ where: { userId_date: { userId: other.id, date: "2026-05-04" } } }))
+        .type
+    ).toBe("S");
+
+    const fRes = await bulkSetEntriesAction([{ userId: other.id, date: "2026-05-11" }], "F");
+    expect(fRes.count).toBe(0);
+    expect(
+      await prisma.entry.findUnique({ where: { userId_date: { userId: other.id, date: "2026-05-11" } } })
+    ).toBeNull();
+  });
+
   it("moves an S-Dienst to a free slot and logs the move with from/to details", async () => {
     const { prisma } = db;
     const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
@@ -205,7 +264,7 @@ describe("calendar actions", () => {
     expect(res.error).toMatch(/Wochenende/);
   });
 
-  it("rejects an editor multi-moving another user's entry", async () => {
+  it("lets an editor multi-move another user's S-Dienst entry", async () => {
     const { prisma } = db;
     const editor = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Editor" }) });
     const other = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Editor" }) });
@@ -217,7 +276,27 @@ describe("calendar actions", () => {
       { fromUserId: other.id, fromDate: "2026-06-01", toUserId: other.id, toDate: "2026-06-08" },
     ]);
 
-    expect(res.error).toMatch(/Berechtigung/);
+    expect(res.error).toBeUndefined();
+    expect(res.count).toBe(1);
+    const entry = await prisma.entry.findUnique({
+      where: { userId_date: { userId: other.id, date: "2026-06-08" } },
+    });
+    expect(entry?.type).toBe("S");
+  });
+
+  it("rejects an editor multi-moving another user's non-Dienst entry", async () => {
+    const { prisma } = db;
+    const editor = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Editor" }) });
+    const other = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Editor" }) });
+    await prisma.entry.create({ data: { userId: other.id, date: "2026-06-01", type: "F" } });
+    currentSession = sessionFor(editor.id, "Editor");
+
+    const { moveEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await moveEntriesAction([
+      { fromUserId: other.id, fromDate: "2026-06-01", toUserId: other.id, toDate: "2026-06-08" },
+    ]);
+
+    expect(res.error).toMatch(/Nur S-Dienste/);
   });
 
   it("generates S-duty entries for a year and logs one AUTOMATIC entry", async () => {

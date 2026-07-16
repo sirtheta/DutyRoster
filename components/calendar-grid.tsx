@@ -126,10 +126,14 @@ export function CalendarGrid({
     return groups;
   }, [dates]);
 
-  function canEdit(userId: number) {
+  // Editors may act on another user's cell if it's empty (it could become a
+  // Dienst) or already holds one — everything else stays own-user-only,
+  // mirroring the server-side check in assertEntryPermission.
+  function canEdit(userId: number, entryType?: EntryType | null) {
     if (role === "Viewer") return false;
     if (role === "Admin") return true;
-    return userId === currentUserId;
+    if (userId === currentUserId) return true;
+    return entryType == null || entryType === "S";
   }
 
   function clearSelection() {
@@ -144,7 +148,8 @@ export function CalendarGrid({
       suppressClickRef.current = false;
       return;
     }
-    if (!canEdit(userId)) return;
+    const entry = entryMap.get(`${userId}-${date}`);
+    if (!canEdit(userId, entry?.type)) return;
     if (activeTool !== null) {
       paintCell(userId, date, activeTool);
       return;
@@ -288,7 +293,10 @@ export function CalendarGrid({
       if (!targetUser || !targetDate) return null;
       const key = cellKey(targetUser.id, targetDate);
       const occupied = entryMap.has(`${targetUser.id}-${targetDate}`) && !sourceKeys.has(key);
-      const forbiddenUserChange = role !== "Admin" && targetUser.id !== c.userId;
+      // Cross-user moves are only ever valid for S-Dienst entries (enforced
+      // server-side too), regardless of who owns the source cell.
+      const sourceType = entryMap.get(`${c.userId}-${c.date}`)?.type;
+      const forbiddenUserChange = role !== "Admin" && targetUser.id !== c.userId && sourceType !== "S";
       if (occupied || isWeekend(targetDate) || forbiddenUserChange) conflict.add(key);
       else valid.add(key);
     }
@@ -466,7 +474,7 @@ export function CalendarGrid({
     const info = entry ? TYPE_INFO[entry.type] : undefined;
     const isHoliday = !!holidayNameByDate[d];
     const weekend = isWeekend(d);
-    const editable = canEdit(u.id);
+    const editable = canEdit(u.id, entry?.type);
     const draggable = editable && !!entry;
     const key = cellKey(u.id, d);
     const selected = selection.has(key);

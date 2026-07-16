@@ -43,10 +43,19 @@ const moveSchema = z.object({
   toDate: dateSchema,
 });
 
-function assertOwnEntry(sessionUserId: string, role: string, targetUserId: number) {
-  if (role !== "Admin" && targetUserId !== Number(sessionUserId)) {
-    throw new Error("Keine Berechtigung für diesen Benutzer.");
-  }
+// Editors may act on other users' S-Dienst entries (create/clear/move), since
+// that's the shared duty roster. Every other entry type stays own-user-only
+// for Editors — Admin is unrestricted throughout.
+function assertEntryPermission(
+  role: string,
+  sessionUserId: string,
+  targetUserId: number,
+  isDienstOp: boolean
+) {
+  if (role === "Admin") return;
+  if (targetUserId === Number(sessionUserId)) return;
+  if (isDienstOp) return;
+  throw new Error("Keine Berechtigung für diesen Benutzer.");
 }
 
 export async function upsertEntryAction(rawInput: {
@@ -61,18 +70,19 @@ export async function upsertEntryAction(rawInput: {
     return { error: parsedInput.error.issues[0]?.message ?? "Ungültige Eingabe." };
   }
   const input = parsedInput.data;
+
+  const existing = await prisma.entry.findUnique({
+    where: { userId_date: { userId: input.userId, date: input.date } },
+  });
+  const isDienstOp = input.type === "S" || existing?.type === "S";
   try {
-    assertOwnEntry(session.user.id, session.user.role, input.userId);
+    assertEntryPermission(session.user.role, session.user.id, input.userId, isDienstOp);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Fehler" };
   }
   if (input.type === "S" && isWeekend(input.date)) {
     return { error: "Kein Dienst an Wochenenden." };
   }
-
-  const existing = await prisma.entry.findUnique({
-    where: { userId_date: { userId: input.userId, date: input.date } },
-  });
 
   if (input.type === null) {
     if (existing) {
@@ -120,9 +130,24 @@ export async function bulkSetEntriesAction(
   const cells = parsedCells.data;
   const type = parsedType.data;
   const role = session.user.role;
-  const sessionUserId = Number(session.user.id);
 
-  const allowed = cells.filter((c) => role === "Admin" || c.userId === sessionUserId);
+  let existingTypes: Map<string, EntryType> | null = null;
+  if (type === null) {
+    const existing = await prisma.entry.findMany({
+      where: { OR: cells.map((c) => ({ userId: c.userId, date: c.date })) },
+    });
+    existingTypes = new Map(existing.map((e) => [`${e.userId}-${e.date}`, e.type]));
+  }
+
+  const allowed = cells.filter((c) => {
+    const isDienstOp = type === "S" || existingTypes?.get(`${c.userId}-${c.date}`) === "S";
+    try {
+      assertEntryPermission(role, session.user.id, c.userId, isDienstOp);
+      return true;
+    } catch {
+      return false;
+    }
+  });
   if (allowed.length === 0) return { count: 0 };
 
   if (type === "S" && allowed.some((c) => isWeekend(c.date))) {
@@ -173,14 +198,8 @@ export async function moveEntryAction(rawInput: {
   const parsedInput = moveSchema.safeParse(rawInput);
   if (!parsedInput.success) return { error: "Ungültige Eingabe." };
   const input = parsedInput.data;
-  try {
-    assertOwnEntry(session.user.id, session.user.role, input.fromUserId);
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Fehler" };
-  }
-  if (session.user.role !== "Admin" && input.toUserId !== input.fromUserId) {
-    return { error: "Nur Admins können Dienste anderen Benutzern zuweisen." };
-  }
+  // No ownership gate here: the check below rejects anything but an S-Dienst
+  // source, so this action can never touch another entry type.
   if (isWeekend(input.toDate)) {
     return { error: "Kein Dienst an Wochenenden." };
   }
@@ -231,16 +250,9 @@ export async function moveEntriesAction(
   const moves = parsedMoves.data;
   if (moves.length === 0) return { count: 0 };
 
-  const role = session.user.role;
+  // No ownership gate here: the check below rejects any batch containing a
+  // non-S-Dienst source, so this action can never touch another entry type.
   for (const m of moves) {
-    try {
-      assertOwnEntry(session.user.id, role, m.fromUserId);
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Fehler" };
-    }
-    if (role !== "Admin" && m.toUserId !== m.fromUserId) {
-      return { error: "Nur Admins können Dienste anderen Benutzern zuweisen." };
-    }
     if (isWeekend(m.toDate)) {
       return { error: "Kein Dienst an Wochenenden." };
     }
