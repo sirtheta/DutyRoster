@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.0...DutyRoster-v0.4.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* **auth:** refresh session name/email on periodic re-check ([8cef2a3](https://github.com/sirtheta/DutyRoster/commit/8cef2a3791d919defd1d512fcdbdd8c08d6e386a))
+* **notifications:** let every user manage and test their own notification settings ([40d3b99](https://github.com/sirtheta/DutyRoster/commit/40d3b999d78fc0a3b4e5be88ec2204d6d65af5cd))
+
 ## [0.4.0](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.3.0...DutyRoster-v0.4.0) (2026-07-16)
 
 
