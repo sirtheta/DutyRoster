@@ -3,9 +3,14 @@ import { NavLinks } from "@/components/nav-links";
 import { MobileNav } from "@/components/mobile-nav";
 import { UserMenu } from "@/components/user-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
+import prisma from "@/lib/prisma";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
+  const ownUser = await prisma.user.findUniqueOrThrow({
+    where: { id: parseInt(session.user.id, 10) },
+    select: { notifyEnabled: true, notifyChannel: true, notifyWeekday: true, notifyHour: true, telegramChatId: true },
+  });
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -19,7 +24,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <UserMenu name={session.user.name ?? ""} email={session.user.email ?? ""} />
+          <UserMenu
+            name={session.user.name ?? ""}
+            email={session.user.email ?? ""}
+            notificationSettings={ownUser}
+          />
         </div>
       </header>
       <main className="flex-1 p-4">{children}</main>
