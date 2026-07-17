@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Bell, KeyRound, LogOut, User as UserIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,13 +29,23 @@ export function UserMenu({
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [notificationDialogOpen, setNotificationDialogOpen] = useState(false);
 
+  const initials = name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Benutzermenü">
-            <UserIcon className="h-4 w-4" />
-          </Button>
+          <button
+            className="flex items-center justify-center size-8 rounded-full bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
+            aria-label="Benutzermenü"
+          >
+            {initials || <UserIcon className="size-4" />}
+          </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>
