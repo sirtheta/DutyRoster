@@ -15,6 +15,7 @@ Ein Dienstplanungstool für das Sanitätsteam eines Unternehmens. Die Anwendung 
 - **Excel-Export** – Jahresplan als Excel-Datei exportierbar
 - **Benutzerverwaltung** – Rollen (Admin, Editor, Viewer), Rotationsreihenfolge, Benachrichtigungskanal pro Person
 - **Passwort zurücksetzen** – Self-Service per E-Mail-Link („Passwort vergessen?“ auf der Anmeldeseite)
+- **Diensttausch** – Tauschanfragen an Kolleg:innen direkt vom Dashboard; beim Annehmen werden die Dienste automatisch übertragen
 - **Audit-Log** – protokolliert Änderungen an Plänen und Einstellungen
 - **Nächtliche Backups** – tägliche SQLite-Sicherung (`VACUUM INTO`) in den Datenordner, mit konfigurierbarer Aufbewahrungsdauer
 

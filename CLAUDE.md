@@ -72,6 +72,8 @@ npx vitest run tests/unit/rotation.test.ts
 
 **Notifications** (`lib/notifications.ts`): An hourly `node-cron` job (`startNotificationScheduler`, schedule from `NOTIFY_CRON_SCHEDULE`) matches each active user's configured weekday/hour — evaluated in the app timezone (`NOTIFY_TIMEZONE`, default `Europe/Zurich`, independent of the server's TZ) — queues a `PendingNotification` if they have an S-Dienst that week, then dispatches via email (`lib/email.ts`) or Telegram (`lib/telegram.ts`) per `user.notifyChannel`. Failed sends are retried up to `NOTIFY_MAX_ATTEMPTS` times (then surfaced on the settings page with a manual retry), and old notification/audit rows are pruned per `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS`.
 
+**Duty swaps** (`app/(app)/swaps/actions.ts`, `SwapRequest` model): Any user (incl. Viewer) can offer their own upcoming S-duty week to a colleague from the dashboard. The colleague (or an Admin) accepts — which atomically moves the entries with `source: Swap` — or declines; both sides are notified via the `PendingNotification` queue and everything is audit-logged.
+
 **Encrypted settings**: SMTP password and Telegram bot token are AES-encrypted at rest in `SystemSettings` via `lib/crypto.ts`, using the `ENCRYPTION_KEY` env var.
 
 **iCal feed** (`app/api/ical/[token]/route.ts`): Per-user, token-authenticated (`User.icalToken`, 32 random bytes, rotatable from the dashboard) `.ics` feed of `F` and `S` entries — no session required, just the token. Failed token lookups are rate-limited per IP.

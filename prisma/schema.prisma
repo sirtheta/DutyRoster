@@ -55,8 +55,40 @@ model User {
   auditLogs           AuditLog[]
   notifications       PendingNotification[]
   passwordResetTokens PasswordResetToken[]
+  swapRequestsFrom    SwapRequest[]         @relation("SwapRequestsFrom")
+  swapRequestsTo      SwapRequest[]         @relation("SwapRequestsTo")
 
   @@index([rotationOrder])
+}
+
+// ── Duty swap requests ─────────────────────────────────────────────────────────
+
+enum SwapRequestStatus {
+  Pending
+  Accepted
+  Declined
+  Cancelled
+}
+
+model SwapRequest {
+  id         Int               @id @default(autoincrement())
+  // Requester who currently holds the S-duties …
+  fromUserId Int
+  // … and the colleague asked to take them over.
+  toUserId   Int
+  // JSON array of YYYY-MM-DD strings (the S-duty days to hand over).
+  dates      String
+  comment    String?
+  status     SwapRequestStatus @default(Pending)
+  createdAt  DateTime          @default(now())
+  decidedAt  DateTime?
+
+  fromUser User @relation("SwapRequestsFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("SwapRequestsTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([fromUserId])
+  @@index([toUserId])
 }
 
 // ── Password reset ─────────────────────────────────────────────────────────────

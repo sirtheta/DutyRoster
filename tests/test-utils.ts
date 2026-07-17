@@ -45,6 +45,7 @@ export function createTestDatabase() {
     const p = state.prisma;
     await p.pendingNotification.deleteMany();
     await p.passwordResetToken.deleteMany();
+    await p.swapRequest.deleteMany();
     await p.auditLog.deleteMany();
     await p.entry.deleteMany();
     await p.holiday.deleteMany();
