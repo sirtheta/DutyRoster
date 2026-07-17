@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import cron from "node-cron";
 import { createTestDatabase, createTestUser } from "../test-utils";
-import { queueDueNotifications, dispatchPendingNotifications } from "@/lib/notifications";
+import {
+  queueDueNotifications,
+  dispatchPendingNotifications,
+  pruneExpiredNotifications,
+} from "@/lib/notifications";
+import { pruneExpiredAuditLogs } from "@/lib/audit";
 
 vi.mock("node-cron", () => ({ default: { schedule: vi.fn(), validate: vi.fn(() => true) } }));
 
@@ -149,6 +154,109 @@ describe("notifications", () => {
     expect(updated.sentAt).toBeNull();
     expect(updated.failedAt).not.toBeNull();
     expect(updated.error).toContain("telegramChatId");
+  });
+
+  it("retries a failed notification and clears the error on success", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ email: "retry@example.com" }) });
+    await prisma.systemSettings.create({
+      data: { id: 1, smtpHost: "smtp.example.com", smtpUser: "u@example.com", smtpPassword: "x" },
+    });
+    const notification = await prisma.pendingNotification.create({
+      data: {
+        userId: user.id,
+        channel: "Email",
+        subject: "Test",
+        body: "Hallo",
+        attempts: 1,
+        failedAt: new Date(),
+        error: "previous failure",
+      },
+    });
+
+    await dispatchPendingNotifications(prisma);
+
+    const updated = await prisma.pendingNotification.findUniqueOrThrow({ where: { id: notification.id } });
+    expect(updated.sentAt).not.toBeNull();
+    expect(updated.failedAt).toBeNull();
+    expect(updated.error).toBeNull();
+    expect(updated.attempts).toBe(2);
+  });
+
+  it("stops retrying once a notification reaches the attempt limit", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ email: "dead@example.com" }) });
+    await prisma.systemSettings.create({
+      data: { id: 1, smtpHost: "smtp.example.com", smtpUser: "u@example.com", smtpPassword: "x" },
+    });
+    const notification = await prisma.pendingNotification.create({
+      data: {
+        userId: user.id,
+        channel: "Email",
+        subject: "Test",
+        body: "Hallo",
+        attempts: 3, // default NOTIFY_MAX_ATTEMPTS
+        failedAt: new Date(),
+        error: "permanent failure",
+      },
+    });
+
+    await dispatchPendingNotifications(prisma);
+
+    expect(mockSendMail).not.toHaveBeenCalled();
+    const updated = await prisma.pendingNotification.findUniqueOrThrow({ where: { id: notification.id } });
+    expect(updated.sentAt).toBeNull();
+    expect(updated.attempts).toBe(3);
+  });
+
+  it("prunes notification rows older than the retention window", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser() });
+    const now = new Date("2026-07-01T00:00:00Z");
+    const old = await prisma.pendingNotification.create({
+      data: {
+        userId: user.id,
+        channel: "Email",
+        subject: "Old",
+        body: "x",
+        createdAt: new Date("2026-01-01T00:00:00Z"), // > 90 days before `now`
+        sentAt: new Date("2026-01-01T01:00:00Z"),
+      },
+    });
+    const recent = await prisma.pendingNotification.create({
+      data: { userId: user.id, channel: "Email", subject: "Recent", body: "x" },
+    });
+
+    const pruned = await pruneExpiredNotifications(prisma, now);
+
+    expect(pruned).toBe(1);
+    const remaining = await prisma.pendingNotification.findMany();
+    expect(remaining.map((n) => n.id)).toEqual([recent.id]);
+    expect(remaining.map((n) => n.id)).not.toContain(old.id);
+  });
+
+  it("prunes audit log rows older than the retention window", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser() });
+    const now = new Date("2027-07-01T00:00:00Z");
+    await prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        userName: user.name,
+        action: "CREATE",
+        entityType: "Entry",
+        createdAt: new Date("2026-01-01T00:00:00Z"), // > 365 days before `now`
+      },
+    });
+    const recent = await prisma.auditLog.create({
+      data: { userId: user.id, userName: user.name, action: "UPDATE", entityType: "Entry" },
+    });
+
+    const pruned = await pruneExpiredAuditLogs(prisma, now);
+
+    expect(pruned).toBe(1);
+    const remaining = await prisma.auditLog.findMany();
+    expect(remaining.map((a) => a.id)).toEqual([recent.id]);
   });
 
   it("does not register a cron job when the schedule is invalid", async () => {

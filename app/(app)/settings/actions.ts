@@ -99,6 +99,33 @@ export async function testSmtpConnectionAction(
   }
 }
 
+/**
+ * Resets all failed, not-yet-sent notifications (attempts/failedAt/error) and
+ * dispatches them immediately, so an admin can retry after fixing e.g. the
+ * SMTP settings or a missing Telegram chat ID.
+ */
+export async function retryFailedNotificationsAction(): Promise<{
+  error?: string;
+  count?: number;
+}> {
+  const session = await requireAdmin();
+  try {
+    const { count } = await prisma.pendingNotification.updateMany({
+      where: { sentAt: null, failedAt: { not: null } },
+      data: { attempts: 0, failedAt: null, error: null },
+    });
+    if (count > 0) await dispatchPendingNotifications(prisma);
+    await logAudit(session, "SETTINGS", "Settings", 1, {
+      action: "retryFailedNotifications",
+      count,
+    });
+    revalidatePath("/settings");
+    return { count };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unbekannter Fehler" };
+  }
+}
+
 /** Dev-only: runs the real notification pipeline (email + Telegram) on demand, ignoring each user's configured weekday/hour. */
 export async function triggerNotificationCheck(): Promise<{ error?: string; success?: boolean; queued?: number }> {
   if (process.env.NODE_ENV === "production") {

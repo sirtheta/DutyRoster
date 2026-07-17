@@ -157,6 +157,8 @@ model PendingNotification {
   sentAt    DateTime?
   failedAt  DateTime?
   error     String?
+  // Delivery attempts so far; rows at NOTIFY_MAX_ATTEMPTS are no longer retried.
+  attempts  Int           @default(0)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

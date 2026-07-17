@@ -34,6 +34,9 @@ export function startNotificationScheduler(): void {
       try {
         await queueDueNotifications(prisma);
         await dispatchPendingNotifications(prisma);
+        await pruneExpiredNotifications(prisma);
+        const { pruneExpiredAuditLogs } = await import("@/lib/audit");
+        await pruneExpiredAuditLogs(prisma);
       } catch (err) {
         log.error({ err }, "Hourly notification cron failed");
       }
@@ -96,10 +99,15 @@ export async function queueDueNotifications(
   return queued;
 }
 
-/** Sends all not-yet-sent PendingNotification rows and stamps sentAt/failedAt. */
+/**
+ * Sends all not-yet-sent PendingNotification rows and stamps sentAt/failedAt.
+ * Rows that failed fewer than NOTIFY_MAX_ATTEMPTS times are retried on the
+ * next run; after that they stay marked failed (visible on the settings page)
+ * instead of being re-attempted every hour forever.
+ */
 export async function dispatchPendingNotifications(prisma: PrismaClient): Promise<void> {
   const pending = await prisma.pendingNotification.findMany({
-    where: { sentAt: null },
+    where: { sentAt: null, attempts: { lt: config.notifications.maxAttempts } },
     include: { user: true },
   });
   if (pending.length === 0) return;
@@ -122,14 +130,37 @@ export async function dispatchPendingNotifications(prisma: PrismaClient): Promis
       }
       await prisma.pendingNotification.update({
         where: { id: notification.id },
-        data: { sentAt: new Date() },
+        data: { sentAt: new Date(), failedAt: null, error: null, attempts: { increment: 1 } },
       });
     } catch (err) {
       log.error({ err, notificationId: notification.id }, "Failed to dispatch notification");
       await prisma.pendingNotification.update({
         where: { id: notification.id },
-        data: { failedAt: new Date(), error: err instanceof Error ? err.message : String(err) },
+        data: {
+          failedAt: new Date(),
+          error: err instanceof Error ? err.message : String(err),
+          attempts: { increment: 1 },
+        },
       });
     }
   }
+}
+
+/**
+ * Deletes PendingNotification rows older than the retention window
+ * (NOTIFY_RETENTION_DAYS, 0 = keep forever) so the queue table doesn't grow
+ * without bound. Returns the number of deleted rows.
+ */
+export async function pruneExpiredNotifications(
+  prisma: PrismaClient,
+  now = new Date()
+): Promise<number> {
+  const days = config.notifications.retentionDays;
+  if (days <= 0) return 0;
+  const cutoff = new Date(now.getTime() - days * 86_400_000);
+  const { count } = await prisma.pendingNotification.deleteMany({
+    where: { createdAt: { lt: cutoff } },
+  });
+  if (count > 0) log.info({ count, days }, "Pruned expired notifications");
+  return count;
 }
