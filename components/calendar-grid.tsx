@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import type { EntryType, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { TYPE_INFO } from "@/lib/entry-types";
-import { datesOfYear, isWeekend, weekdayAbbr } from "@/lib/date";
+import { datesOfYear, isWeekend, toDateString, weekdayAbbr } from "@/lib/date";
 import { bulkSetEntriesAction, moveEntryAction, moveEntriesAction } from "@/app/(app)/calendar/[year]/actions";
 import { MONTH_NAMES, cellKey, parseCellKey } from "@/components/calendar/types";
 import type { EntryRow, Move, PaintTool, UserRow } from "@/components/calendar/types";
@@ -53,6 +53,12 @@ export function CalendarGrid({
   }, [entries]);
 
   const dates = useMemo(() => datesOfYear(year), [year]);
+  // Only meaningful when the viewed year is the current one — a "today"
+  // marker in a past/future year's grid would be misleading.
+  const todayDate = useMemo(() => {
+    const today = toDateString(new Date());
+    return today.startsWith(`${year}-`) ? today : null;
+  }, [year]);
   const userIndexById = useMemo(() => {
     const map = new Map<number, number>();
     users.forEach((u, i) => map.set(u.id, i));
@@ -214,6 +220,20 @@ export function CalendarGrid({
     setActiveTool((prev) => (prev === "DELETE" ? null : "DELETE"));
   }
 
+  // Scroll today's column into view once when a year containing today is
+  // opened — desktop and mobile each hold their own copy of the marked cell,
+  // but only the one CSS currently shows (`hidden`/`md:hidden`) actually
+  // scrolls; the other is a no-op since it isn't laid out.
+  useEffect(() => {
+    if (!todayDate) return;
+    gridRef.current
+      ?.querySelector<HTMLElement>("[data-today-cell]")
+      ?.scrollIntoView({ inline: "center", block: "nearest" });
+    mobileGridRef.current
+      ?.querySelector<HTMLElement>("[data-today-cell]")
+      ?.scrollIntoView({ inline: "center", block: "center" });
+  }, [todayDate]);
+
   // Live sync: other users' mutations for this year arrive as SSE "change"
   // events (see app/api/calendar/[year]/stream), so we just refetch server
   // data instead of reconciling anything client-side.
@@ -265,15 +285,18 @@ export function CalendarGrid({
   function renderDateHeaderCell(d: string, keyPrefix: string) {
     const weekend = isWeekend(d);
     const uncovered = uncoveredDates?.has(d) ?? false;
+    const today = d === todayDate;
     return (
       <th
         key={`${keyPrefix}-${d}`}
+        data-today-cell={today ? "" : undefined}
         className={cn(
           "min-w-[1.75rem] border-b border-l p-1 text-center font-normal text-muted-foreground",
           (holidayNameByDate[d] || weekend) && "bg-muted",
-          uncovered && "bg-destructive/15 text-destructive"
+          uncovered && "bg-destructive/15 text-destructive",
+          today && "bg-primary/20 font-semibold text-primary"
         )}
-        title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : uncovered ? "Ungedeckte Woche" : undefined)}
+        title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : uncovered ? "Ungedeckte Woche" : today ? "Heute" : undefined)}
       >
         <div className="text-[0.65rem] leading-none">{weekdayAbbr(d)}</div>
         <div>{parseInt(d.slice(8, 10), 10)}</div>
@@ -299,9 +322,16 @@ export function CalendarGrid({
     // (entry-type color, or muted/background for empty cells) so a row stays
     // traceable across a wide scroll without drowning out the type colors.
     const baseBg = isHoliday || weekend ? "var(--muted)" : "var(--background)";
+    const today = d === todayDate;
+    let backgroundColor = info
+      ? `color-mix(in oklch, ${info.color} 85%, ${rowTint} 15%)`
+      : `color-mix(in oklch, ${baseBg} 88%, ${rowTint} 12%)`;
+    // Nudge every cell in today's column toward the primary color so the
+    // current day stands out as a column, on top of its normal type/row tint.
+    if (today) backgroundColor = `color-mix(in oklch, ${backgroundColor} 78%, var(--primary) 22%)`;
     const cellStyle: CSSProperties = info
-      ? { backgroundColor: `color-mix(in oklch, ${info.color} 85%, ${rowTint} 15%)`, color: info.textColor ?? "#fff" }
-      : { backgroundColor: `color-mix(in oklch, ${baseBg} 88%, ${rowTint} 12%)` };
+      ? { backgroundColor, color: info.textColor ?? "#fff" }
+      : { backgroundColor };
     return (
       <td
         key={d}
@@ -378,16 +408,19 @@ export function CalendarGrid({
               {dates.map((d) => {
                 const weekend = isWeekend(d);
                 const uncovered = uncoveredDates?.has(d) ?? false;
+                const today = d === todayDate;
                 return (
                   <th
                     key={d}
+                    data-today-cell={today ? "" : undefined}
                     className={cn(
                       "min-w-[1.75rem] border-b border-l p-1 text-center font-normal text-muted-foreground",
                       (holidayNameByDate[d] || weekend) && "bg-muted",
                       uncovered && "bg-destructive/15 text-destructive",
+                      today && "bg-primary/20 font-semibold text-primary",
                       d.slice(5) === dates[0].slice(5) && "border-l-2"
                     )}
-                    title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : uncovered ? "Ungedeckte Woche" : undefined)}
+                    title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : uncovered ? "Ungedeckte Woche" : today ? "Heute" : undefined)}
                   >
                     <div className="text-[0.65rem] leading-none">{weekdayAbbr(d)}</div>
                     <div>{parseInt(d.slice(8, 10), 10)}</div>
