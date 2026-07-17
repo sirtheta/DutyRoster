@@ -8,6 +8,7 @@ import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { queueDueNotifications, dispatchPendingNotifications } from "@/lib/notifications";
+import { verifyTelegramBotToken } from "@/lib/telegram";
 
 const settingsSchema = z.object({
   smtpHost: z.string().optional(),
@@ -94,6 +95,35 @@ export async function testSmtpConnectionAction(
     });
     await transporter.verify();
     return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Verbindung fehlgeschlagen." };
+  }
+}
+
+/** Verifies a Telegram bot token via `getMe`, using the (possibly unsaved) form value or the stored one. */
+export async function testTelegramConnectionAction(
+  formData: FormData
+): Promise<{ error?: string; success?: boolean; botUsername?: string }> {
+  await requireAdmin();
+
+  const tokenInput = formData.get("telegramBotToken");
+  let token: string;
+  if (typeof tokenInput === "string" && tokenInput.length > 0) {
+    token = tokenInput;
+  } else {
+    const existing = await prisma.systemSettings.findUnique({
+      where: { id: 1 },
+      select: { telegramBotToken: true },
+    });
+    if (!existing?.telegramBotToken) {
+      return { error: "Kein Bot-Token hinterlegt. Bitte Token eingeben." };
+    }
+    token = decryptSecret(existing.telegramBotToken);
+  }
+
+  try {
+    const { username } = await verifyTelegramBotToken(token);
+    return { success: true, botUsername: username };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Verbindung fehlgeschlagen." };
   }

@@ -27,3 +27,14 @@ export async function sendTelegramMessage(
     throw new Error(`Telegram API ${res.status}: ${detail}`);
   }
 }
+
+/** Verifies a bot token works by calling Telegram's `getMe`, returning the bot's username on success. */
+export async function verifyTelegramBotToken(botToken: string): Promise<{ username?: string }> {
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Telegram API ${res.status}: ${detail}`);
+  }
+  const data = await res.json();
+  return { username: data?.result?.username };
+}

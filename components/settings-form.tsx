@@ -3,7 +3,11 @@
 import { useActionState, useEffect, useRef, useTransition } from "react";
 import { toast } from "sonner";
 import type { SystemSettings } from "@prisma/client";
-import { updateSettingsAction, testSmtpConnectionAction } from "@/app/(app)/settings/actions";
+import {
+  updateSettingsAction,
+  testSmtpConnectionAction,
+  testTelegramConnectionAction,
+} from "@/app/(app)/settings/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -12,12 +16,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 
 export function SettingsForm({
   settings,
+  telegramBotTokenSet,
 }: {
   settings: Pick<SystemSettings, "smtpHost" | "smtpPort" | "smtpUser" | "smtpFromName"> | null;
+  telegramBotTokenSet: boolean;
 }) {
   const [state, formAction, pending] = useActionState(updateSettingsAction, undefined);
   const formRef = useRef<HTMLFormElement>(null);
   const [testPending, startTest] = useTransition();
+  const [telegramTestPending, startTelegramTest] = useTransition();
 
   useEffect(() => {
     if (state?.success) toast.success("Einstellungen gespeichert.");
@@ -29,6 +36,22 @@ export function SettingsForm({
     startTest(async () => {
       const result = await testSmtpConnectionAction(formData);
       if (result.success) toast.success("SMTP-Verbindung erfolgreich getestet.");
+      if (result.error) toast.error(result.error);
+    });
+  }
+
+  function runTelegramTest() {
+    if (!formRef.current) return;
+    const formData = new FormData(formRef.current);
+    startTelegramTest(async () => {
+      const result = await testTelegramConnectionAction(formData);
+      if (result.success) {
+        toast.success(
+          result.botUsername
+            ? `Telegram-Verbindung erfolgreich getestet (@${result.botUsername}).`
+            : "Telegram-Verbindung erfolgreich getestet."
+        );
+      }
       if (result.error) toast.error(result.error);
     });
   }
@@ -75,12 +98,25 @@ export function SettingsForm({
         <CardHeader>
           <CardTitle className="text-base">Telegram</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="telegramBotToken">
               Bot-Token <span className="text-muted-foreground">(leer lassen = unverändert)</span>
             </Label>
             <PasswordInput id="telegramBotToken" name="telegramBotToken" />
+            <p className="text-xs text-muted-foreground">
+              Status:{" "}
+              {telegramBotTokenSet ? (
+                <span className="text-foreground">Token hinterlegt</span>
+              ) : (
+                "Kein Token hinterlegt"
+              )}
+            </p>
+          </div>
+          <div>
+            <Button type="button" variant="outline" disabled={telegramTestPending} onClick={runTelegramTest}>
+              {telegramTestPending ? "Wird getestet…" : "Verbindung testen"}
+            </Button>
           </div>
         </CardContent>
       </Card>

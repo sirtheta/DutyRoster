@@ -27,6 +27,7 @@ function formData(fields: Record<string, string>): FormData {
 
 describe("settings actions", () => {
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,6 +35,7 @@ describe("settings actions", () => {
 
   afterEach(() => {
     process.env.NODE_ENV = originalNodeEnv;
+    global.fetch = originalFetch;
   });
 
   it("rejects a non-admin from updating settings", async () => {
@@ -92,6 +94,60 @@ describe("settings actions", () => {
     const res = await updateSettingsAction(undefined, formData({ smtpPort: "not-a-number" }));
 
     expect(res.error).toBe("Ungültige Eingabe.");
+  });
+
+  it("testTelegramConnectionAction verifies the unsaved form token via getMe", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ result: { username: "roster_bot" } }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { testTelegramConnectionAction } = await import("@/app/(app)/settings/actions");
+    const res = await testTelegramConnectionAction(formData({ telegramBotToken: "new-token" }));
+
+    expect(res.success).toBe(true);
+    expect(res.botUsername).toBe("roster_bot");
+    expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/botnew-token/getMe");
+  });
+
+  it("testTelegramConnectionAction falls back to the stored token when the field is blank", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+    const { encryptSecret } = await import("@/lib/crypto");
+    await db.prisma.systemSettings.create({ data: { id: 1, telegramBotToken: encryptSecret("stored-token") } });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ result: {} }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { testTelegramConnectionAction } = await import("@/app/(app)/settings/actions");
+    const res = await testTelegramConnectionAction(formData({}));
+
+    expect(res.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/botstored-token/getMe");
+  });
+
+  it("testTelegramConnectionAction errors when no token is provided or stored", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { testTelegramConnectionAction } = await import("@/app/(app)/settings/actions");
+    const res = await testTelegramConnectionAction(formData({}));
+
+    expect(res.error).toBe("Kein Bot-Token hinterlegt. Bitte Token eingeben.");
+  });
+
+  it("testTelegramConnectionAction surfaces the Telegram API error", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 401, text: async () => "Unauthorized" }) as unknown as typeof fetch;
+
+    const { testTelegramConnectionAction } = await import("@/app/(app)/settings/actions");
+    const res = await testTelegramConnectionAction(formData({ telegramBotToken: "bad-token" }));
+
+    expect(res.error).toBe("Telegram API 401: Unauthorized");
   });
 
   it("triggerNotificationCheck queues and dispatches outside production", async () => {

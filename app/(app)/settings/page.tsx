@@ -13,12 +13,12 @@ const failedAtFormat = new Intl.DateTimeFormat("de-CH", {
 
 export default async function SettingsPage() {
   await requireAdmin();
-  // Only the fields the form displays — the encrypted smtpPassword and
-  // telegramBotToken ciphertexts stay on the server.
+  // The encrypted smtpPassword/telegramBotToken ciphertexts stay on the server;
+  // only a derived "is a token set" boolean is forwarded to the client component.
   const [settings, failedNotifications] = await Promise.all([
     prisma.systemSettings.findUnique({
       where: { id: 1 },
-      select: { smtpHost: true, smtpPort: true, smtpUser: true, smtpFromName: true },
+      select: { smtpHost: true, smtpPort: true, smtpUser: true, smtpFromName: true, telegramBotToken: true },
     }),
     prisma.pendingNotification.findMany({
       where: { sentAt: null, failedAt: { not: null } },
@@ -37,6 +37,14 @@ export default async function SettingsPage() {
     error: n.error,
   }));
 
+  const telegramBotTokenSet = Boolean(settings?.telegramBotToken);
+  const formSettings = settings && {
+    smtpHost: settings.smtpHost,
+    smtpPort: settings.smtpPort,
+    smtpUser: settings.smtpUser,
+    smtpFromName: settings.smtpFromName,
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl">Einstellungen</h1>
@@ -46,7 +54,10 @@ export default async function SettingsPage() {
           maxAttempts={config.notifications.maxAttempts}
         />
       )}
-      <SettingsForm settings={settings} />
+      <SettingsForm
+        settings={formSettings ?? null}
+        telegramBotTokenSet={telegramBotTokenSet}
+      />
       {process.env.NODE_ENV !== "production" && <DevToolsCard />}
     </div>
   );
