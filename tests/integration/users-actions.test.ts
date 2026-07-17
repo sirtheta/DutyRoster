@@ -241,7 +241,7 @@ describe("users actions", () => {
     const target = await prisma.user.create({
       data: createTestUser({ email: "target@example.com", rotationOrder: 0 }),
     });
-    let futureDate = "2026-09-14"; // a Monday
+    const futureDate = "2026-09-14"; // a Monday
     await prisma.entry.create({ data: { userId: target.id, date: futureDate, type: "S", source: "Automatic" } });
     currentSession = sessionFor(admin.id, "Admin");
 
