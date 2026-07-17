@@ -6,6 +6,8 @@
       "package-name": "duty-roster",
       "tag-separator": "-",
       "component": "DutyRoster"
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true
     }
   }
 }
