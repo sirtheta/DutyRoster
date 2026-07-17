@@ -44,6 +44,27 @@ const moveSchema = z.object({
   toDate: dateSchema,
 });
 
+type EntryClient = { entry: Pick<typeof prisma.entry, "findMany"> };
+
+// SQLite's bound-parameter limit varies by build (999 on some, 32766 on
+// others) and each cell in an `OR` lookup binds 2 params (userId + date), so
+// a bulk action touching thousands of cells can exceed it in one query.
+// Chunking well under the lowest common limit keeps this safe everywhere.
+const CELL_QUERY_BATCH_SIZE = 400;
+
+/** Looks up entries for a batch of (userId, date) cells, chunked to stay under SQLite's parameter limit. */
+async function findEntriesForCells(client: EntryClient, cells: { userId: number; date: string }[]) {
+  const results: Prisma.EntryGetPayload<object>[] = [];
+  for (let i = 0; i < cells.length; i += CELL_QUERY_BATCH_SIZE) {
+    const batch = cells.slice(i, i + CELL_QUERY_BATCH_SIZE);
+    const found = await client.entry.findMany({
+      where: { OR: batch.map((c) => ({ userId: c.userId, date: c.date })) },
+    });
+    results.push(...found);
+  }
+  return results;
+}
+
 // Editors may act on other users' S-Dienst entries (create/clear/move), since
 // that's the shared duty roster. Every other entry type stays own-user-only
 // for Editors — Admin is unrestricted throughout.
@@ -135,9 +156,7 @@ export async function bulkSetEntriesAction(
 
   let existingTypes: Map<string, EntryType> | null = null;
   if (type === null) {
-    const existing = await prisma.entry.findMany({
-      where: { OR: cells.map((c) => ({ userId: c.userId, date: c.date })) },
-    });
+    const existing = await findEntriesForCells(prisma, cells);
     existingTypes = new Map(existing.map((e) => [`${e.userId}-${e.date}`, e.type]));
   }
 
@@ -298,9 +317,10 @@ export async function moveEntriesAction(
     // check and the write; the unique (userId, date) constraint (caught as
     // P2002 below) is the final backstop if it still does.
     await prisma.$transaction(async (tx) => {
-      const sources = await tx.entry.findMany({
-        where: { OR: moves.map((m) => ({ userId: m.fromUserId, date: m.fromDate })) },
-      });
+      const sources = await findEntriesForCells(
+        tx,
+        moves.map((m) => ({ userId: m.fromUserId, date: m.fromDate }))
+      );
       const sourceMap = new Map(sources.map((s) => [`${s.userId}-${s.date}`, s]));
       for (const m of moves) {
         const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`);
@@ -311,9 +331,10 @@ export async function moveEntriesAction(
 
       // A destination is fine if it's empty, or if it's only occupied by one
       // of the entries in this same batch (which will be vacated by this move).
-      const destinations = await tx.entry.findMany({
-        where: { OR: moves.map((m) => ({ userId: m.toUserId, date: m.toDate })) },
-      });
+      const destinations = await findEntriesForCells(
+        tx,
+        moves.map((m) => ({ userId: m.toUserId, date: m.toDate }))
+      );
       for (const d of destinations) {
         if (!sourceKeys.has(`${d.userId}-${d.date}`)) {
           throw new Error("Zielzelle ist bereits belegt.");

@@ -1,6 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Session } from "next-auth";
 import { createTestDatabase, createTestUser } from "../test-utils";
+import { addDays, datesOfYear, isWeekend } from "@/lib/date";
+
+/** `count` consecutive weekdays starting at `start` (YYYY-MM-DD). */
+function weekdaysFrom(start: string, count: number): string[] {
+  const result: string[] = [];
+  let d = start;
+  while (result.length < count) {
+    if (!isWeekend(d)) result.push(d);
+    d = addDays(d, 1);
+  }
+  return result;
+}
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -125,6 +137,29 @@ describe("calendar actions", () => {
       type: "S",
       cells: [{ userId: other.id, date: "2026-05-04" }],
     });
+  });
+
+  it("bulk-deletes a large batch of cells spanning multiple query-chunk boundaries", async () => {
+    const { prisma } = db;
+    const admin = await prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    // More cells than fit in a single SQLite-bound-parameter-safe query batch
+    // (CELL_QUERY_BATCH_SIZE = 400), spread across a full year for one user —
+    // reproduces the "query parameter limit exceeded" crash from a large
+    // rubber-band selection.
+    const dates = [...datesOfYear(2026), ...datesOfYear(2027)].slice(0, 500);
+    await prisma.entry.createMany({
+      data: dates.map((date) => ({ userId: admin.id, date, type: "F" as const })),
+    });
+    const cells = dates.map((date) => ({ userId: admin.id, date }));
+
+    const { bulkSetEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await bulkSetEntriesAction(cells, null);
+
+    expect(res.error).toBeUndefined();
+    expect(res.count).toBe(500);
+    expect(await prisma.entry.count({ where: { userId: admin.id } })).toBe(0);
   });
 
   it("moves an S-Dienst to a free slot and logs the move with from/to details", async () => {
@@ -256,6 +291,36 @@ describe("calendar actions", () => {
       (await prisma.entry.findUniqueOrThrow({ where: { userId_date: { userId: user.id, date: "2026-06-01" } } }))
         .type
     ).toBe("S");
+  });
+
+  it("multi-moves a large batch of entries spanning multiple query-chunk boundaries", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    currentSession = sessionFor(user.id, "Editor");
+
+    // More moves than fit in a single SQLite-bound-parameter-safe query batch
+    // (CELL_QUERY_BATCH_SIZE = 400). +700 days (a multiple of 7) keeps each
+    // target on the same weekday as its source.
+    const sources = weekdaysFrom("2026-01-01", 450);
+    await prisma.entry.createMany({
+      data: sources.map((date) => ({ userId: user.id, date, type: "S" as const })),
+    });
+    const moves = sources.map((date) => ({
+      fromUserId: user.id,
+      fromDate: date,
+      toUserId: user.id,
+      toDate: addDays(date, 700),
+    }));
+
+    const { moveEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await moveEntriesAction(moves);
+
+    expect(res.error).toBeUndefined();
+    expect(res.count).toBe(450);
+    expect(await prisma.entry.count({ where: { userId: user.id, date: { in: sources } } })).toBe(0);
+    expect(
+      await prisma.entry.count({ where: { userId: user.id, type: "S", date: { in: moves.map((m) => m.toDate) } } })
+    ).toBe(450);
   });
 
   it("rejects a multi-move that includes a weekend target", async () => {
