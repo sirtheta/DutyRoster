@@ -52,15 +52,27 @@ export async function createUserAction(
     return { error: "Passwort muss mindestens 8 Zeichen lang sein." };
   }
 
+  const passwordHash = await hash(password, bcryptRounds);
+
   try {
-    const user = await prisma.user.create({
-      data: {
-        ...parsed.data,
-        passwordHash: await hash(password, bcryptRounds),
-        // Explicit CSPRNG token instead of the schema's cuid() default,
-        // which is not designed to be an unguessable bearer credential.
-        icalToken: randomBytes(32).toString("base64url"),
-      },
+    const user = await prisma.$transaction(async (tx) => {
+      // rotationOrder is a continuous insertion index, not a raw stored
+      // value: make room for the new user by bumping everyone from that
+      // position onward, so a new user at 0 pushes the rest back instead
+      // of colliding with them.
+      await tx.user.updateMany({
+        where: { rotationOrder: { gte: parsed.data.rotationOrder } },
+        data: { rotationOrder: { increment: 1 } },
+      });
+      return tx.user.create({
+        data: {
+          ...parsed.data,
+          passwordHash,
+          // Explicit CSPRNG token instead of the schema's cuid() default,
+          // which is not designed to be an unguessable bearer credential.
+          icalToken: randomBytes(32).toString("base64url"),
+        },
+      });
     });
     await logAudit(session, "CREATE", "User", user.id, { email: user.email });
   } catch {
