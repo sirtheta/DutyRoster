@@ -16,6 +16,7 @@ export type UserListItem = Pick<
   | "name"
   | "role"
   | "isActive"
+  | "exitDate"
   | "rotationOrder"
   | "notifyEnabled"
   | "notifyChannel"

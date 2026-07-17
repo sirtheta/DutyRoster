@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { toggleActiveAction } from "@/app/(app)/users/actions";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UserFormDialog, type UserListItem } from "@/components/user-form-dialog";
+import { UserTerminateDialog } from "@/components/user-terminate-dialog";
 
 export function UserRowActions({ user }: { user: UserListItem }) {
   const [isPending, startTransition] = useTransition();
+  const [terminateOpen, setTerminateOpen] = useState(false);
 
   return (
     <div className="flex items-center justify-end gap-1">
@@ -39,8 +41,18 @@ export function UserRowActions({ user }: { user: UserListItem }) {
           >
             {user.isActive ? "Deaktivieren" : "Aktivieren"}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              setTerminateOpen(true);
+            }}
+            className="text-destructive"
+          >
+            Austritt erfassen…
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <UserTerminateDialog user={user} open={terminateOpen} onOpenChange={setTerminateOpen} />
     </div>
   );
 }
