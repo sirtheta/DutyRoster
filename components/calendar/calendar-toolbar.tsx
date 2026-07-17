@@ -40,7 +40,7 @@ export function CalendarToolbar({
   return (
     <div
       ref={toolbarRef}
-      className="sticky top-0 z-20 flex flex-col gap-2 rounded-md border bg-background p-2 shadow-sm"
+      className="sticky top-14 z-20 flex flex-col gap-2 rounded-md border bg-background p-2 shadow-sm"
     >
       <span className="text-sm tabular-nums text-muted-foreground">
         {displaySize > 0
