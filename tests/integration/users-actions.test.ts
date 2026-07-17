@@ -87,6 +87,17 @@ describe("users actions", () => {
     expect(res.error).toMatch(/Passwort/);
   });
 
+  it("rejects creating a user with a negative rotation order", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { createUserAction } = await import("@/app/(app)/users/actions");
+    const res = await createUserAction(undefined, userFormData({ rotationOrder: "-1" }));
+
+    expect(res.error).toBeTruthy();
+    await expect(db.prisma.user.findUnique({ where: { email: "new@example.com" } })).resolves.toBeNull();
+  });
+
   it("rejects creating a user with invalid input", async () => {
     const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
     currentSession = sessionFor(admin.id, "Admin");

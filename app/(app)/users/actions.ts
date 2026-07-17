@@ -17,7 +17,7 @@ const userSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1),
   role: z.enum(UserRole),
-  rotationOrder: z.coerce.number().int().default(0),
+  rotationOrder: z.coerce.number().int().min(0).default(0),
   notifyEnabled: z.coerce.boolean().default(false),
   notifyChannel: z.enum(NotifyChannel).default("Email"),
   notifyWeekday: z.coerce.number().int().min(0).max(6).default(1),
