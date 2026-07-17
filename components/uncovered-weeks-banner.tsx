@@ -7,7 +7,7 @@ export function UncoveredWeeksBanner({ weekNumbers }: { weekNumbers: number[] })
       <CardContent className="py-3 text-sm">
         <span className="font-medium text-destructive">Ungedeckte Wochen: </span>
         {weekNumbers.map((n) => `KW ${n}`).join(", ")} — für diese Wochen ist noch niemand für den
-        S-Dienst eingeteilt.
+        Sanitäts-Dienst eingeteilt.
       </CardContent>
     </Card>
   );
