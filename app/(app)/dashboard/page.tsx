@@ -3,8 +3,11 @@ import { appOrigin } from "@/lib/origin";
 import { requireSession } from "@/lib/permissions";
 import { ENTRY_TYPES } from "@/lib/entry-types";
 import { formatDateCH, parseDate, toDateString } from "@/lib/date";
-import { isoWeekNumber, weekRange } from "@/lib/week";
+import { addDays } from "@/lib/date";
+import { isoWeekNumber, uncoveredWeekNumbers, weekRange } from "@/lib/week";
+import { holidaySetForYear } from "@/lib/holidays";
 import { DashboardChart } from "@/components/dashboard-chart";
+import { DutyOverviewCard } from "@/components/duty-overview-card";
 import { IcalSubscribeCard } from "@/components/ical-subscribe-card";
 import { SwapRequestsCard } from "@/components/swap-requests-card";
 
@@ -17,9 +20,14 @@ export default async function DashboardPage({
   const userId = Number(session.user.id);
   const { year: yearParam } = await searchParams;
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
-  const today = toDateString(new Date());
+  const now = new Date();
+  const today = toDateString(now);
+  const currentYear = today.slice(0, 4);
+  const thisWeek = weekRange(now);
+  const nextWeek = weekRange(parseDate(addDays(thisWeek.start, 7))!);
 
-  const [users, entries, currentUser, upcomingDuties, pendingSwaps] = await Promise.all([
+  const [users, entries, currentUser, upcomingDuties, pendingSwaps, dutyEntries, yearDuties, holidays] =
+    await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { rotationOrder: "asc" } }),
     prisma.entry.findMany({ where: { date: { startsWith: `${year}-` } } }),
     prisma.user.findUnique({
@@ -36,7 +44,23 @@ export default async function DashboardPage({
       include: { fromUser: { select: { name: true } }, toUser: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
     }),
+    prisma.entry.findMany({
+      where: { type: "S", date: { gte: thisWeek.start, lte: nextWeek.end } },
+      include: { user: { select: { name: true } } },
+    }),
+    prisma.entry.findMany({
+      where: { type: "S", date: { startsWith: `${currentYear}-` } },
+      select: { date: true },
+    }),
+    holidaySetForYear(Number(currentYear)),
   ]);
+
+  const namesInRange = (start: string, end: string) => [
+    ...new Set(dutyEntries.filter((e) => e.date >= start && e.date <= end).map((e) => e.user.name)),
+  ];
+  const dutyThisWeek = { weekNumber: isoWeekNumber(thisWeek.start), names: namesInRange(thisWeek.start, thisWeek.end) };
+  const dutyNextWeek = { weekNumber: isoWeekNumber(nextWeek.start), names: namesInRange(nextWeek.start, nextWeek.end) };
+  const uncovered = uncoveredWeekNumbers(today, new Set(yearDuties.map((e) => e.date)), holidays);
 
   // Own upcoming S-duties grouped into calendar weeks — the units offered for
   // swapping. Weeks already part of an open request are hidden.
@@ -89,6 +113,11 @@ export default async function DashboardPage({
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl">Dashboard {year}</h1>
+      <DutyOverviewCard
+        thisWeek={dutyThisWeek}
+        nextWeek={dutyNextWeek}
+        uncoveredWeekNumbers={uncovered}
+      />
       <DashboardChart data={data} year={year} />
       <SwapRequestsCard
         myWeeks={myWeeks}

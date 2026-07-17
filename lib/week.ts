@@ -10,6 +10,31 @@ export function weekRange(date: Date): { start: string; end: string } {
   return { start, end };
 }
 
+/**
+ * ISO week numbers (KW) of the Mon–Fri weeks from `fromDate`'s week to the
+ * end of its year that have at least one non-holiday workday but no S-duty.
+ */
+export function uncoveredWeekNumbers(
+  fromDate: string,
+  sDutyDates: Set<string>,
+  holidays: Set<string>
+): number[] {
+  const year = fromDate.slice(0, 4);
+  const result: number[] = [];
+  let monday = weekRange(parseDate(fromDate)!).start;
+  while (monday.slice(0, 4) <= year) {
+    const days = [0, 1, 2, 3, 4]
+      .map((i) => addDays(monday, i))
+      .filter((d) => d.slice(0, 4) === year);
+    const workDays = days.filter((d) => !holidays.has(d));
+    if (workDays.length > 0 && !workDays.some((d) => sDutyDates.has(d))) {
+      result.push(isoWeekNumber(workDays[0]));
+    }
+    monday = addDays(monday, 7);
+  }
+  return result;
+}
+
 /** ISO 8601 week number (KW) of a `YYYY-MM-DD` string. */
 export function isoWeekNumber(dateStr: string): number {
   const d = parseDate(dateStr)!;

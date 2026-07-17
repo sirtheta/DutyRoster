@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { weekRange, isoWeekNumber } from "@/lib/week";
+import { weekRange, isoWeekNumber, uncoveredWeekNumbers } from "@/lib/week";
 
 describe("weekRange", () => {
   it("returns Monday..Sunday for a mid-week date", () => {
@@ -20,6 +20,32 @@ describe("weekRange", () => {
     const { start, end } = weekRange(new Date(2026, 2, 2));
     expect(start).toBe("2026-03-02");
     expect(end).toBe("2026-03-08");
+  });
+});
+
+describe("uncoveredWeekNumbers", () => {
+  it("lists weeks without duty, skipping covered and fully-holiday weeks", () => {
+    // From Monday 2026-11-30 (KW 49) to year end: KW 50 has duty on
+    // Tuesday, KW 52 is entirely holidays — 49, 51, 53 stay uncovered.
+    const duties = new Set(["2026-12-08"]);
+    const holidays = new Set([
+      "2026-12-21",
+      "2026-12-22",
+      "2026-12-23",
+      "2026-12-24",
+      "2026-12-25",
+    ]);
+    expect(uncoveredWeekNumbers("2026-11-30", duties, holidays)).toEqual([49, 51, 53]);
+    // A mid-week start still evaluates the whole current week.
+    expect(uncoveredWeekNumbers("2026-12-02", duties, holidays)).toEqual([49, 51, 53]);
+  });
+
+  it("handles a first week that starts in the previous year", () => {
+    // 2026's week 1 starts Monday 2025-12-29; only Jan 1–2 belong to 2026.
+    const everyWeekCovered = new Set<string>();
+    const result = uncoveredWeekNumbers("2026-01-01", everyWeekCovered, new Set());
+    expect(result[0]).toBe(1);
+    expect(result).toHaveLength(53);
   });
 });
 
