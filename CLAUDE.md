@@ -30,6 +30,7 @@ npm test               # Run all tests (Vitest)
 npm run test:watch     # Watch mode
 npm run test:coverage  # Coverage report (v8)
 npm run test:integration  # Integration tests only
+npm run test:e2e       # Playwright E2E tests (starts its own dev server on :3111)
 # Run a single test file:
 npx vitest run tests/unit/rotation.test.ts
 ```
@@ -107,6 +108,8 @@ See `.env.example` for the full list, including session/rate-limit/logging overr
 ### Testing
 
 Tests live in `tests/unit/` and `tests/integration/`. Integration tests use an in-memory or temp SQLite database (configured in `tests/setup.ts`). Coverage is collected only for `lib/**/*.ts` and `app/api/**/*.ts`.
+
+Playwright E2E smoke tests live in `tests/e2e/` (`npm run test:e2e`): the config boots a dev server on port 3111 against a freshly seeded SQLite DB (`tests/e2e/global-setup.ts`, admin login `admin@e2e.local`). CI runs them in the `e2e` job (`npx playwright install chromium` first).
 
 ---
 

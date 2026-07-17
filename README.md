@@ -59,6 +59,7 @@ npm test                   # Alle Tests
 npm run test:watch         # Tests im Watch-Modus
 npm run test:coverage      # Testabdeckung
 npm run test:integration   # Nur Integrationstests
+npm run test:e2e           # Playwright-E2E-Tests (startet eigenen Dev-Server)
 ```
 
 ## Konfiguration
