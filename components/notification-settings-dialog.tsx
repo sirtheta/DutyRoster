@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { HelpDialog } from "@/components/ui/help-dialog";
 
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 
@@ -121,7 +122,23 @@ export function NotificationSettingsDialog({
             </div>
             {notifyChannel === "Telegram" && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="telegramChatId">Telegram Chat-ID</Label>
+                <Label htmlFor="telegramChatId" className="flex items-center gap-1">
+                  Telegram Chat-ID
+                  <HelpDialog title="Telegram Chat-ID finden" label="Hilfe zur Telegram Chat-ID">
+                    <ol>
+                      <li>
+                        In Telegram nach dem Bot suchen (Benutzername vom Admin erfragen) und den
+                        Chat mit <strong>&bdquo;Start&ldquo;</strong> bzw. <code>/start</code> öffnen — sonst
+                        kann der Bot keine Nachrichten senden.
+                      </li>
+                      <li>
+                        Die eigene Chat-ID herausfinden, z. B. per Chat mit{" "}
+                        <strong>@userinfobot</strong> (zeigt die numerische ID direkt an).
+                      </li>
+                      <li>Die ID hier eintragen und mit &bdquo;Testen&ldquo; prüfen.</li>
+                    </ol>
+                  </HelpDialog>
+                </Label>
                 <Input
                   id="telegramChatId"
                   name="telegramChatId"

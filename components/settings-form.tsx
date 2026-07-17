@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { HelpDialog } from "@/components/ui/help-dialog";
 
 export function SettingsForm({
   settings,
@@ -96,7 +97,27 @@ export function SettingsForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Telegram</CardTitle>
+          <CardTitle className="flex items-center gap-1 text-base">
+            Telegram
+            <HelpDialog title="Telegram-Bot einrichten" label="Hilfe zur Telegram-Bot-Einrichtung">
+              <ol>
+                <li>
+                  In Telegram den Chat mit <strong>@BotFather</strong> öffnen und <code>/newbot</code> senden.
+                </li>
+                <li>Einen Anzeigenamen und einen Benutzernamen vergeben (muss auf &bdquo;bot&ldquo; enden).</li>
+                <li>
+                  BotFather antwortet mit einem <strong>API-Token</strong> (z. B.{" "}
+                  <code>123456789:ABCdef…</code>) — dieses Token kopieren.
+                </li>
+                <li>Das Token unten im Feld &bdquo;Bot-Token&ldquo; einfügen und speichern.</li>
+                <li>
+                  Mit &bdquo;Verbindung testen&ldquo; prüfen, ob der Bot erreichbar ist. Damit einzelne
+                  Benutzer:innen Nachrichten erhalten, müssen sie zusätzlich den Chat mit dem Bot
+                  starten und ihre Chat-ID in ihren eigenen Benachrichtigungseinstellungen hinterlegen.
+                </li>
+              </ol>
+            </HelpDialog>
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
