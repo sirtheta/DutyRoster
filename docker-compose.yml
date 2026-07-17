@@ -21,6 +21,9 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      # Server timezone (log timestamps etc.). Notification scheduling uses
+      # NOTIFY_TIMEZONE (default Europe/Zurich) and works regardless of TZ.
+      TZ: ${TZ:-Europe/Zurich}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/auth/session"]
       interval: 30s

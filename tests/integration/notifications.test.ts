@@ -23,7 +23,9 @@ describe("notifications", () => {
 
   it("queues a notification only for users due this hour with an S-Dienst this week", async () => {
     const { prisma } = db;
-    const now = new Date(2026, 2, 2, 7, 0, 0); // Monday 2026-03-02, 07:00
+    // Monday 2026-03-02, 07:00 Europe/Zurich (CET) — expressed as a fixed
+    // instant so the test passes regardless of the runner's own timezone.
+    const now = new Date("2026-03-02T07:00:00+01:00");
     const dueUser = await prisma.user.create({
       data: createTestUser({
         email: "due@example.com",
@@ -55,9 +57,21 @@ describe("notifications", () => {
     expect(queuedAgain).toBe(0);
   });
 
+  it("matches notifyWeekday/notifyHour in the app timezone, not the server's", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({
+      data: createTestUser({ notifyEnabled: true, notifyWeekday: 1, notifyHour: 7 }),
+    });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-03-03", type: "S" } });
+
+    // 06:00 UTC = 07:00 Zurich — due. 07:00 UTC = 08:00 Zurich — not due.
+    expect(await queueDueNotifications(prisma, new Date("2026-03-02T07:00:00Z"))).toBe(0);
+    expect(await queueDueNotifications(prisma, new Date("2026-03-02T06:00:00Z"))).toBe(1);
+  });
+
   it("does not queue a due user without an S-Dienst this week", async () => {
     const { prisma } = db;
-    const now = new Date(2026, 2, 2, 7, 0, 0);
+    const now = new Date("2026-03-02T07:00:00+01:00");
     await prisma.user.create({
       data: createTestUser({ notifyEnabled: true, notifyWeekday: 1, notifyHour: 7 }),
     });

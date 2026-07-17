@@ -69,7 +69,7 @@ npx vitest run tests/unit/rotation.test.ts
 - A week is skipped (rotation still advances) if the assigned user is blocked that week or the week is already covered by someone else; a fully-holiday week doesn't consume a turn at all
 - `EntryType` (`prisma/schema.prisma`): `S` (Sanität/duty), `F` (Ferien), `G` (geschäftliche Absenz), `C` (Kompensieren), `M` (Militär), `K` (Kurzarbeit), `TZ` (Teilzeit), `A` (Ausbildung), `H` (Homeoffice) — labels/colors in `lib/entry-types.ts`, and `AUTOMATION_BLOCKED` defines which types make a user unavailable for the automation
 
-**Notifications** (`lib/notifications.ts`): An hourly `node-cron` job (`startNotificationScheduler`, schedule from `NOTIFY_CRON_SCHEDULE`) matches each active user's configured weekday/hour, queues a `PendingNotification` if they have an S-Dienst that week, then dispatches via email (`lib/email.ts`) or Telegram (`lib/telegram.ts`) per `user.notifyChannel`.
+**Notifications** (`lib/notifications.ts`): An hourly `node-cron` job (`startNotificationScheduler`, schedule from `NOTIFY_CRON_SCHEDULE`) matches each active user's configured weekday/hour — evaluated in the app timezone (`NOTIFY_TIMEZONE`, default `Europe/Zurich`, independent of the server's TZ) — queues a `PendingNotification` if they have an S-Dienst that week, then dispatches via email (`lib/email.ts`) or Telegram (`lib/telegram.ts`) per `user.notifyChannel`.
 
 **Encrypted settings**: SMTP password and Telegram bot token are AES-encrypted at rest in `SystemSettings` via `lib/crypto.ts`, using the `ENCRYPTION_KEY` env var.
 
@@ -91,6 +91,7 @@ npx vitest run tests/unit/rotation.test.ts
 | `ADMIN_PASSWORD_HASH` | First run | Pre-hashed bcrypt alternative to `ADMIN_PASSWORD` |
 | `DEFAULT_CANTON` | No | ISO canton code for `date-holidays` seeding, defaults to `BE` |
 | `NOTIFY_CRON_SCHEDULE` | No | Cron expression for the hourly notification check, defaults to `0 * * * *` |
+| `NOTIFY_TIMEZONE` | No | IANA timezone for users' notification weekday/hour, defaults to `Europe/Zurich` |
 | `ROTATION_BLOCK_SIZE` | No | Default consecutive-day block size for the yearly rotation automation |
 | `DISABLE_EMAIL` / `DISABLE_TELEGRAM` | No | Dev/staging switches to suppress outgoing notifications |
 

@@ -12,6 +12,9 @@ export const config = {
   },
   notifications: {
     cronSchedule: process.env.NOTIFY_CRON_SCHEDULE || "0 * * * *",
+    // IANA timezone the users' notifyWeekday/notifyHour refer to. Evaluated
+    // via Intl, so it works regardless of the server's own TZ setting.
+    timezone: process.env.NOTIFY_TIMEZONE || "Europe/Zurich",
   },
   rotation: {
     defaultBlockSize: parseInt(process.env.ROTATION_BLOCK_SIZE ?? "") || 5,

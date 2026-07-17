@@ -54,6 +54,51 @@ export function isWeekend(str: string): boolean {
   return w === 0 || w === 6;
 }
 
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+/**
+ * Weekday (0=So … 6=Sa), hour (0–23), and calendar day (`YYYY-MM-DD`) of a
+ * moment as seen in an IANA timezone — independent of the server's own TZ.
+ */
+export function zonedParts(
+  date: Date,
+  timeZone: string
+): { weekday: number; hour: number; date: string } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    weekday: "short",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return {
+    weekday: WEEKDAY_INDEX[get("weekday")] ?? 0,
+    hour: parseInt(get("hour"), 10),
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+  };
+}
+
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const WEEKDAY_ABBR = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
 /** Two-letter German weekday abbreviation for a `YYYY-MM-DD` string. */

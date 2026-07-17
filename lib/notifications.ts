@@ -5,6 +5,7 @@ import { config } from "@/lib/config";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { weekRange } from "@/lib/week";
+import { isValidTimeZone, parseDate, zonedParts } from "@/lib/date";
 import { TYPE_INFO } from "@/lib/entry-types";
 
 const log = logger.child({ module: "notifications" });
@@ -20,16 +21,25 @@ export function startNotificationScheduler(): void {
     log.error({ schedule }, "Invalid NOTIFY_CRON_SCHEDULE — scheduler not started");
     return;
   }
-  cron.schedule(schedule, async () => {
-    log.info("Running hourly notification check");
-    const { default: prisma } = await import("@/lib/prisma");
-    try {
-      await queueDueNotifications(prisma);
-      await dispatchPendingNotifications(prisma);
-    } catch (err) {
-      log.error({ err }, "Hourly notification cron failed");
-    }
-  });
+  const timezone = config.notifications.timezone;
+  if (!isValidTimeZone(timezone)) {
+    log.error({ timezone }, "Invalid NOTIFY_TIMEZONE — scheduler not started");
+    return;
+  }
+  cron.schedule(
+    schedule,
+    async () => {
+      log.info("Running hourly notification check");
+      const { default: prisma } = await import("@/lib/prisma");
+      try {
+        await queueDueNotifications(prisma);
+        await dispatchPendingNotifications(prisma);
+      } catch (err) {
+        log.error({ err }, "Hourly notification cron failed");
+      }
+    },
+    { timezone }
+  );
   globalForScheduler.notificationSchedulerStarted = true;
   log.info({ schedule }, "Notification scheduler started");
 }
@@ -46,9 +56,10 @@ export async function queueDueNotifications(
   opts: { force?: boolean } = {}
 ): Promise<number> {
   const { force = false } = opts;
-  const weekday = now.getDay();
-  const hour = now.getHours();
-  const { start, end } = weekRange(now);
+  // Users configure weekday/hour in the app timezone (NOTIFY_TIMEZONE), so
+  // evaluate `now` there — the server itself may run in UTC (e.g. Docker).
+  const { weekday, hour, date: today } = zonedParts(now, config.notifications.timezone);
+  const { start, end } = weekRange(parseDate(today)!);
 
   const dueUsers = await prisma.user.findMany({
     where: {
