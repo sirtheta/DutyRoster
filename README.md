@@ -71,7 +71,6 @@ Die wichtigsten Umgebungsvariablen (vollständige Liste in `.env.example`):
 | `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_PASSWORD` | Beim ersten Start | Erstellt den initialen Admin-Benutzer |
 | `DEFAULT_CANTON` | Nein | ISO-Kantonscode für die Feiertagsseedung (Standard: `BE`) |
 | `NOTIFY_CRON_SCHEDULE` | Nein | Cron-Ausdruck für die stündliche Benachrichtigungsprüfung |
-| `ROTATION_BLOCK_SIZE` | Nein | Standard-Blockgrösse (aufeinanderfolgende Tage) für die Rotationsautomatik |
 | `DISABLE_EMAIL` / `DISABLE_TELEGRAM` | Nein | Deaktiviert ausgehende Benachrichtigungen (für Entwicklung/Staging) |
 
 ## Projektstruktur

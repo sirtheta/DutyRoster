@@ -94,7 +94,6 @@ npx vitest run tests/unit/rotation.test.ts
 | `NOTIFY_TIMEZONE` | No | IANA timezone for users' notification weekday/hour, defaults to `Europe/Zurich` |
 | `NOTIFY_MAX_ATTEMPTS` | No | Delivery attempts per notification before giving up, defaults to `3` |
 | `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS` | No | Days to keep notification / audit rows (`0` = forever), default `90` / `365` |
-| `ROTATION_BLOCK_SIZE` | No | Default consecutive-day block size for the yearly rotation automation |
 | `DISABLE_EMAIL` / `DISABLE_TELEGRAM` | No | Dev/staging switches to suppress outgoing notifications |
 
 See `.env.example` for the full list, including session/rate-limit/logging overrides.

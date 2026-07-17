@@ -30,9 +30,6 @@ export const config = {
     // Days to keep AuditLog rows; 0 disables pruning (keep forever).
     retentionDays: envInt(process.env.AUDIT_RETENTION_DAYS, 365),
   },
-  rotation: {
-    defaultBlockSize: parseInt(process.env.ROTATION_BLOCK_SIZE ?? "") || 5,
-  },
   holidays: {
     defaultCanton: process.env.DEFAULT_CANTON || "BE",
   },
