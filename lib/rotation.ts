@@ -30,40 +30,55 @@ export interface RotationAssignment {
   userId: number;
 }
 
+export interface RotationResult {
+  assignments: RotationAssignment[];
+  /** First workday (YYYY-MM-DD) of each week that nobody could cover. */
+  uncoveredWeeks: string[];
+}
+
 /**
  * Pure rotation function for the yearly automation (S-duty).
  *
  * Groups the year's working days into calendar weeks (Mon–Fri; weekends are
- * never scheduled) and hands each week to the next user in rotation order.
- * A week is skipped entirely (nobody assigned, rotation still advances to
- * the next user for the following week) if the assigned user is personally
- * blocked on any working day of it, or if some other user already has duty
- * that week. A week that is entirely holidays doesn't consume anyone's turn
- * at all — rotation stays on the same user for the next real week.
+ * never scheduled) and hands each week to the next user in a rotation queue.
+ * If the user at the front of the queue is personally blocked that week, the
+ * next available user takes the week instead — the blocked user keeps their
+ * place at the front and gets the following week, so nobody loses a turn and
+ * no week goes uncovered just because one person is away. Only when every
+ * user is blocked is the week reported as uncovered.
+ *
+ * A week some other user already has duty in (occupied) is skipped without
+ * consuming anyone's turn, as is a week that is entirely holidays.
  */
-export function runRotation(options: RotationOptions): RotationAssignment[] {
+export function runRotation(options: RotationOptions): RotationResult {
   const { year, holidays, blockedDates, occupiedDates } = options;
-  const users = [...options.users].sort((a, b) => a.rotationOrder - b.rotationOrder);
-  if (users.length === 0) return [];
+  const queue = [...options.users].sort((a, b) => a.rotationOrder - b.rotationOrder);
+  if (queue.length === 0) return { assignments: [], uncoveredWeeks: [] };
 
   const assignments: RotationAssignment[] = [];
+  const uncoveredWeeks: string[] = [];
   const weeks = groupIntoWeeks(datesOfYear(year));
 
-  let userIndex = 0;
   for (const week of weeks) {
     const workDays = week.filter((d) => !holidays.has(d));
     if (workDays.length === 0) continue; // fully-holiday week — nobody's turn is used
+    if (workDays.some((d) => occupiedDates.has(d))) continue; // already covered manually
 
-    const user = users[userIndex % users.length];
-    const blocked = blockedDates.get(user.userId);
-    const alreadyOccupied = workDays.some((d) => occupiedDates.has(d) || blocked?.has(d));
-    if (!alreadyOccupied) {
-      for (const d of workDays) assignments.push({ date: d, userId: user.userId });
+    const index = queue.findIndex((u) => {
+      const blocked = blockedDates.get(u.userId);
+      return !workDays.some((d) => blocked?.has(d));
+    });
+    if (index === -1) {
+      uncoveredWeeks.push(workDays[0]);
+      continue;
     }
-    userIndex++;
+
+    const [user] = queue.splice(index, 1);
+    queue.push(user);
+    for (const d of workDays) assignments.push({ date: d, userId: user.userId });
   }
 
-  return assignments;
+  return { assignments, uncoveredWeeks };
 }
 
 /** Groups a year's weekday dates into chronological Mon–Fri calendar weeks. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { weekRange } from "@/lib/week";
+import { weekRange, isoWeekNumber } from "@/lib/week";
 
 describe("weekRange", () => {
   it("returns Monday..Sunday for a mid-week date", () => {
@@ -20,5 +20,16 @@ describe("weekRange", () => {
     const { start, end } = weekRange(new Date(2026, 2, 2));
     expect(start).toBe("2026-03-02");
     expect(end).toBe("2026-03-08");
+  });
+});
+
+describe("isoWeekNumber", () => {
+  it("computes ISO week numbers including year-boundary weeks", () => {
+    expect(isoWeekNumber("2026-01-01")).toBe(1); // Thursday, ISO week 1
+    expect(isoWeekNumber("2026-03-02")).toBe(10);
+    expect(isoWeekNumber("2026-12-31")).toBe(53);
+    // 2027-01-01 is a Friday and still belongs to ISO week 53 of 2026.
+    expect(isoWeekNumber("2027-01-01")).toBe(53);
+    expect(isoWeekNumber("2025-12-29")).toBe(1); // Monday of 2026's week 1
   });
 });

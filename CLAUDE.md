@@ -65,8 +65,8 @@ npx vitest run tests/unit/rotation.test.ts
 - `hasRole(session, roles)` — synchronous check for UI rendering
 
 **Duty rotation** (`lib/rotation.ts`):
-- `runRotation()` is a pure function: given a year, active users (sorted by `rotationOrder`), holidays, and each user's already-blocked/occupied dates, it assigns Mon–Fri work weeks to users round-robin
-- A week is skipped (rotation still advances) if the assigned user is blocked that week or the week is already covered by someone else; a fully-holiday week doesn't consume a turn at all
+- `runRotation()` is a pure function: given a year, active users (sorted by `rotationOrder`), holidays, and each user's already-blocked/occupied dates, it assigns Mon–Fri work weeks via a rotation queue and returns `{ assignments, uncoveredWeeks }`
+- If the user at the front of the queue is blocked that week, the next available user takes it and the blocked user keeps their place (gets the following week); a week is only reported uncovered when *every* user is blocked. Weeks already covered by someone's S-duty and fully-holiday weeks are skipped without consuming a turn
 - `EntryType` (`prisma/schema.prisma`): `S` (Sanität/duty), `F` (Ferien), `G` (geschäftliche Absenz), `C` (Kompensieren), `M` (Militär), `K` (Kurzarbeit), `TZ` (Teilzeit), `A` (Ausbildung), `H` (Homeoffice) — labels/colors in `lib/entry-types.ts`, and `AUTOMATION_BLOCKED` defines which types make a user unavailable for the automation
 
 **Notifications** (`lib/notifications.ts`): An hourly `node-cron` job (`startNotificationScheduler`, schedule from `NOTIFY_CRON_SCHEDULE`) matches each active user's configured weekday/hour — evaluated in the app timezone (`NOTIFY_TIMEZONE`, default `Europe/Zurich`, independent of the server's TZ) — queues a `PendingNotification` if they have an S-Dienst that week, then dispatches via email (`lib/email.ts`) or Telegram (`lib/telegram.ts`) per `user.notifyChannel`. Failed sends are retried up to `NOTIFY_MAX_ATTEMPTS` times (then surfaced on the settings page with a manual retry), and old notification/audit rows are pruned per `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS`.

@@ -349,7 +349,9 @@ export async function moveEntriesAction(
   return { count: moves.length };
 }
 
-export async function generateAutomationAction(rawYear: number): Promise<{ count: number }> {
+export async function generateAutomationAction(
+  rawYear: number
+): Promise<{ count: number; uncoveredWeeks: string[] }> {
   const session = await requireAdmin();
   const year = z.number().int().min(2000).max(2100).parse(rawYear);
 
@@ -369,7 +371,7 @@ export async function generateAutomationAction(rawYear: number): Promise<{ count
     existingKeys.add(`${e.userId}-${e.date}`);
   }
 
-  const assignments = runRotation({
+  const { assignments, uncoveredWeeks } = runRotation({
     year,
     users: users.map((u) => ({ userId: u.id, rotationOrder: u.rotationOrder })),
     holidays,
@@ -394,8 +396,8 @@ export async function generateAutomationAction(rawYear: number): Promise<{ count
     }
   });
 
-  await logAudit(session, "AUTOMATIC", "Entry", undefined, { year, count });
+  await logAudit(session, "AUTOMATIC", "Entry", undefined, { year, count, uncoveredWeeks });
   revalidatePath(`/calendar/${year}`);
   notifyCalendarChange(year);
-  return { count };
+  return { count, uncoveredWeeks };
 }
