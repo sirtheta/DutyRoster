@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useRef, useTransition } from "react";
 import { toast } from "sonner";
 import type { SystemSettings } from "@prisma/client";
-import { updateSettingsAction } from "@/app/(app)/settings/actions";
+import { updateSettingsAction, testSmtpConnectionAction } from "@/app/(app)/settings/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -16,13 +16,25 @@ export function SettingsForm({
   settings: Pick<SystemSettings, "smtpHost" | "smtpPort" | "smtpUser" | "smtpFromName"> | null;
 }) {
   const [state, formAction, pending] = useActionState(updateSettingsAction, undefined);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [testPending, startTest] = useTransition();
 
   useEffect(() => {
     if (state?.success) toast.success("Einstellungen gespeichert.");
   }, [state]);
 
+  function runConnectionTest() {
+    if (!formRef.current) return;
+    const formData = new FormData(formRef.current);
+    startTest(async () => {
+      const result = await testSmtpConnectionAction(formData);
+      if (result.success) toast.success("SMTP-Verbindung erfolgreich getestet.");
+      if (result.error) toast.error(result.error);
+    });
+  }
+
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form ref={formRef} action={formAction} className="flex flex-col gap-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">SMTP (E-Mail-Versand)</CardTitle>
@@ -50,6 +62,11 @@ export function SettingsForm({
           <div className="col-span-2 flex flex-col gap-2">
             <Label htmlFor="smtpFromName">Absendername</Label>
             <Input id="smtpFromName" name="smtpFromName" defaultValue={settings?.smtpFromName ?? ""} />
+          </div>
+          <div className="col-span-2">
+            <Button type="button" variant="outline" disabled={testPending} onClick={runConnectionTest}>
+              {testPending ? "Wird getestet…" : "Verbindung testen"}
+            </Button>
           </div>
         </CardContent>
       </Card>

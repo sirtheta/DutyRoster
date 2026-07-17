@@ -133,14 +133,16 @@ export function NotificationSettingsDialog({
           </div>
           {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
           <DialogFooter className="gap-2 sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={testPending || (notifyChannel === "Telegram" && !telegramChatId)}
-              onClick={runTest}
-            >
-              {testPending ? "Wird gesendet…" : "Testen"}
-            </Button>
+            {notifyEnabled && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={testPending || (notifyChannel === "Telegram" && !telegramChatId)}
+                onClick={runTest}
+              >
+                {testPending ? "Wird gesendet…" : "Testen"}
+              </Button>
+            )}
             <Button type="submit" disabled={pending}>
               {pending ? "Speichern…" : "Speichern"}
             </Button>
