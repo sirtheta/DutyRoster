@@ -19,7 +19,8 @@ export type UserListItem = Pick<
   | "exitDate"
   | "rotationOrder"
   | "notifyEnabled"
-  | "notifyChannel"
+  | "notifyEmail"
+  | "notifyTelegram"
   | "notifyWeekday"
   | "notifyHour"
   | "telegramChatId"
@@ -36,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 
 export function UserFormDialog({
@@ -102,16 +104,16 @@ export function UserFormDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="role">Rolle</Label>
-            <select
-              id="role"
-              name="role"
-              defaultValue={user?.role ?? "Viewer"}
-              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              <option value="Admin">Admin</option>
-              <option value="Editor">Editor</option>
-              <option value="Viewer">Viewer</option>
-            </select>
+            <Select name="role" defaultValue={user?.role ?? "Viewer"}>
+              <SelectTrigger id="role" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Admin">Admin</SelectItem>
+                <SelectItem value="Editor">Editor</SelectItem>
+                <SelectItem value="Viewer">Viewer</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="col-span-2 flex items-center gap-2">
             <input
@@ -126,31 +128,48 @@ export function UserFormDialog({
           </div>
           <div className={notifyEnabled ? "contents" : "hidden"}>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="notifyChannel">Kanal</Label>
-                <select
-                  id="notifyChannel"
-                  name="notifyChannel"
-                  defaultValue={user?.notifyChannel ?? "Email"}
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  <option value="Email">E-Mail</option>
-                  <option value="Telegram">Telegram</option>
-                </select>
+                <Label>Kanal</Label>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="notifyEmail"
+                      name="notifyEmail"
+                      type="checkbox"
+                      defaultChecked={user?.notifyEmail ?? true}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="notifyEmail" className="font-normal">
+                      E-Mail
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="notifyTelegram"
+                      name="notifyTelegram"
+                      type="checkbox"
+                      defaultChecked={user?.notifyTelegram ?? false}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="notifyTelegram" className="font-normal">
+                      Telegram
+                    </Label>
+                  </div>
+                </div>
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="notifyWeekday">Wochentag</Label>
-                <select
-                  id="notifyWeekday"
-                  name="notifyWeekday"
-                  defaultValue={user?.notifyWeekday ?? 1}
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  {WEEKDAYS.map((w, i) => (
-                    <option key={i} value={i}>
-                      {w}
-                    </option>
-                  ))}
-                </select>
+                <Select name="notifyWeekday" defaultValue={String(user?.notifyWeekday ?? 1)}>
+                  <SelectTrigger id="notifyWeekday" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WEEKDAYS.map((w, i) => (
+                      <SelectItem key={i} value={String(i)}>
+                        {w}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="notifyHour">Uhrzeit (Stunde, 24h)</Label>

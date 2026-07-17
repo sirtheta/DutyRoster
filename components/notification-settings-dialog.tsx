@@ -18,17 +18,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { HelpDialog } from "@/components/ui/help-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 
 export type OwnNotificationSettings = {
   notifyEnabled: boolean;
-  notifyChannel: NotifyChannel;
+  notifyEmail: boolean;
+  notifyTelegram: boolean;
   notifyWeekday: number;
   notifyHour: number;
   telegramChatId: string | null;
 };
 
+/**
+ * Local form state is only initialized from `settings` on mount, so the
+ * caller must remount this component (e.g. `key={open}`) each time it's
+ * opened — otherwise a previous edit or a stale `settings` prop would linger
+ * across opens instead of reflecting what was actually saved.
+ */
 export function NotificationSettingsDialog({
   open,
   onOpenChange,
@@ -39,21 +47,26 @@ export function NotificationSettingsDialog({
   settings: OwnNotificationSettings;
 }) {
   const [notifyEnabled, setNotifyEnabled] = useState(settings.notifyEnabled);
-  const [notifyChannel, setNotifyChannel] = useState<NotifyChannel>(settings.notifyChannel);
+  const [notifyEmail, setNotifyEmail] = useState(settings.notifyEmail);
+  const [notifyTelegram, setNotifyTelegram] = useState(settings.notifyTelegram);
+  const [notifyWeekday, setNotifyWeekday] = useState(String(settings.notifyWeekday));
   const [telegramChatId, setTelegramChatId] = useState(settings.telegramChatId ?? "");
   const [state, formAction, pending] = useActionState(updateOwnNotificationSettingsAction, undefined);
   const [testPending, startTest] = useTransition();
+  const [testingChannel, setTestingChannel] = useState<NotifyChannel | null>(null);
 
   useEffect(() => {
-    if (state?.success) toast.success("Benachrichtigungseinstellungen gespeichert.");
+    if (state?.success) {
+      toast.success("Benachrichtigungseinstellungen gespeichert.");
+      onOpenChange(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
-  function runTest() {
+  function runTest(channel: NotifyChannel) {
+    setTestingChannel(channel);
     startTest(async () => {
-      const result = await sendTestNotificationAction(
-        notifyChannel,
-        notifyChannel === "Telegram" ? telegramChatId : undefined
-      );
+      const result = await sendTestNotificationAction(channel, channel === "Telegram" ? telegramChatId : undefined);
       if (result.success) toast.success("Test-Benachrichtigung gesendet.");
       if (result.error) toast.error(result.error);
     });
@@ -79,32 +92,50 @@ export function NotificationSettingsDialog({
           </div>
           <div className={notifyEnabled ? "contents" : "hidden"}>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="notifyChannel">Kanal</Label>
-              <select
-                id="notifyChannel"
-                name="notifyChannel"
-                value={notifyChannel}
-                onChange={(e) => setNotifyChannel(e.target.value as NotifyChannel)}
-                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="Email">E-Mail</option>
-                <option value="Telegram">Telegram</option>
-              </select>
+              <Label>Kanal</Label>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="notifyEmail"
+                    name="notifyEmail"
+                    type="checkbox"
+                    checked={notifyEmail}
+                    onChange={(e) => setNotifyEmail(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <Label htmlFor="notifyEmail" className="font-normal">
+                    E-Mail
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="notifyTelegram"
+                    name="notifyTelegram"
+                    type="checkbox"
+                    checked={notifyTelegram}
+                    onChange={(e) => setNotifyTelegram(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <Label htmlFor="notifyTelegram" className="font-normal">
+                    Telegram
+                  </Label>
+                </div>
+              </div>
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="notifyWeekday">Wochentag</Label>
-              <select
-                id="notifyWeekday"
-                name="notifyWeekday"
-                defaultValue={settings.notifyWeekday}
-                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              >
-                {WEEKDAYS.map((w, i) => (
-                  <option key={i} value={i}>
-                    {w}
-                  </option>
-                ))}
-              </select>
+              <Select name="notifyWeekday" value={notifyWeekday} onValueChange={setNotifyWeekday}>
+                <SelectTrigger id="notifyWeekday" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WEEKDAYS.map((w, i) => (
+                    <SelectItem key={i} value={String(i)}>
+                      {w}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="notifyHour">Uhrzeit (Stunde, 24h)</Label>
@@ -120,7 +151,7 @@ export function NotificationSettingsDialog({
                 z. B. 7 = 07:00 Uhr, lokale Zeit (Europe/Zurich)
               </span>
             </div>
-            {notifyChannel === "Telegram" && (
+            {notifyTelegram && (
               <div className="flex flex-col gap-2">
                 <Label htmlFor="telegramChatId" className="flex items-center gap-1">
                   Telegram Chat-ID
@@ -151,14 +182,28 @@ export function NotificationSettingsDialog({
           {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
           <DialogFooter className="gap-2 sm:justify-between">
             {notifyEnabled && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={testPending || (notifyChannel === "Telegram" && !telegramChatId)}
-                onClick={runTest}
-              >
-                {testPending ? "Wird gesendet…" : "Testen"}
-              </Button>
+              <div className="flex gap-2">
+                {notifyEmail && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={testPending}
+                    onClick={() => runTest("Email")}
+                  >
+                    {testPending && testingChannel === "Email" ? "Wird gesendet…" : "E-Mail testen"}
+                  </Button>
+                )}
+                {notifyTelegram && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={testPending || !telegramChatId}
+                    onClick={() => runTest("Telegram")}
+                  >
+                    {testPending && testingChannel === "Telegram" ? "Wird gesendet…" : "Telegram testen"}
+                  </Button>
+                )}
+              </div>
             )}
             <Button type="submit" disabled={pending}>
               {pending ? "Speichern…" : "Speichern"}

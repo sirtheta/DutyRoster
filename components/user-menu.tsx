@@ -69,6 +69,7 @@ export function UserMenu({
       </DropdownMenu>
       <ChangePasswordDialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen} />
       <NotificationSettingsDialog
+        key={notificationDialogOpen ? "open" : "closed"}
         open={notificationDialogOpen}
         onOpenChange={setNotificationDialogOpen}
         settings={notificationSettings}

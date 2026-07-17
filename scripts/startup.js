@@ -152,9 +152,9 @@ function seedAdminUser(db, dataDir) {
       db.prepare(
         `INSERT INTO "User"
            (email, name, passwordHash, role, isActive, rotationOrder,
-            notifyEnabled, notifyChannel, notifyWeekday, notifyHour, icalToken,
+            notifyEnabled, notifyEmail, notifyTelegram, notifyWeekday, notifyHour, icalToken,
             createdAt, updatedAt)
-         VALUES (?, ?, ?, 'Admin', 1, 0, 0, 'Email', 1, 7, ?, ?, ?)`
+         VALUES (?, ?, ?, 'Admin', 1, 0, 0, 1, 0, 1, 7, ?, ?, ?)`
       ).run(email, name, hash, icalToken, now, now);
       console.log(`[startup] Admin user created: ${email}`);
     }

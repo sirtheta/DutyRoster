@@ -15,7 +15,8 @@ import prisma from "@/lib/prisma";
 
 const notificationSettingsSchema = z.object({
   notifyEnabled: z.coerce.boolean().default(false),
-  notifyChannel: z.enum(NotifyChannel).default("Email"),
+  notifyEmail: z.coerce.boolean().default(false),
+  notifyTelegram: z.coerce.boolean().default(false),
   notifyWeekday: z.coerce.number().int().min(0).max(6).default(1),
   notifyHour: z.coerce.number().int().min(0).max(23).default(7),
   telegramChatId: z.string().optional(),
@@ -102,14 +103,18 @@ export async function updateOwnNotificationSettingsAction(
 
   const parsed = notificationSettingsSchema.safeParse({
     notifyEnabled: formData.get("notifyEnabled") === "on",
-    notifyChannel: formData.get("notifyChannel"),
+    notifyEmail: formData.get("notifyEmail") === "on",
+    notifyTelegram: formData.get("notifyTelegram") === "on",
     notifyWeekday: formData.get("notifyWeekday"),
     notifyHour: formData.get("notifyHour"),
     telegramChatId: formData.get("telegramChatId") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Ungültige Eingabe." };
 
-  if (parsed.data.notifyEnabled && parsed.data.notifyChannel === "Telegram" && !parsed.data.telegramChatId) {
+  if (parsed.data.notifyEnabled && !parsed.data.notifyEmail && !parsed.data.notifyTelegram) {
+    return { error: "Bitte mindestens einen Kanal auswählen." };
+  }
+  if (parsed.data.notifyEnabled && parsed.data.notifyTelegram && !parsed.data.telegramChatId) {
     return { error: "Telegram Chat-ID fehlt." };
   }
 

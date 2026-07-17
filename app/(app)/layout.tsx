@@ -11,7 +11,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await requireSession();
   const ownUser = await prisma.user.findUniqueOrThrow({
     where: { id: parseInt(session.user.id, 10) },
-    select: { notifyEnabled: true, notifyChannel: true, notifyWeekday: true, notifyHour: true, telegramChatId: true },
+    select: {
+      notifyEnabled: true,
+      notifyEmail: true,
+      notifyTelegram: true,
+      notifyWeekday: true,
+      notifyHour: true,
+      telegramChatId: true,
+    },
   });
 
   return (

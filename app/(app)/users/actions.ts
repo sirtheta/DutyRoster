@@ -8,22 +8,32 @@ import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { bcryptRounds } from "@/lib/password";
-import { UserRole, NotifyChannel } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 import { parseDate, toDateString } from "@/lib/date";
 import { notifyCalendarChange } from "@/lib/calendar-events";
 import { generateAutomationAction } from "@/app/(app)/calendar/[year]/actions";
 
-const userSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1),
-  role: z.enum(UserRole),
-  rotationOrder: z.coerce.number().int().min(0).default(0),
-  notifyEnabled: z.coerce.boolean().default(false),
-  notifyChannel: z.enum(NotifyChannel).default("Email"),
-  notifyWeekday: z.coerce.number().int().min(0).max(6).default(1),
-  notifyHour: z.coerce.number().int().min(0).max(23).default(7),
-  telegramChatId: z.string().optional(),
-});
+const userSchema = z
+  .object({
+    email: z.string().email(),
+    name: z.string().min(1),
+    role: z.enum(UserRole),
+    rotationOrder: z.coerce.number().int().min(0).default(0),
+    notifyEnabled: z.coerce.boolean().default(false),
+    notifyEmail: z.coerce.boolean().default(false),
+    notifyTelegram: z.coerce.boolean().default(false),
+    notifyWeekday: z.coerce.number().int().min(0).max(6).default(1),
+    notifyHour: z.coerce.number().int().min(0).max(23).default(7),
+    telegramChatId: z.string().optional(),
+  })
+  .refine((data) => !data.notifyEnabled || data.notifyEmail || data.notifyTelegram, {
+    message: "Bitte mindestens einen Benachrichtigungskanal auswählen.",
+    path: ["notifyEmail"],
+  })
+  .refine((data) => !data.notifyEnabled || !data.notifyTelegram || data.telegramChatId, {
+    message: "Telegram Chat-ID fehlt.",
+    path: ["telegramChatId"],
+  });
 
 function readUserFields(formData: FormData) {
   return {
@@ -32,7 +42,8 @@ function readUserFields(formData: FormData) {
     role: formData.get("role"),
     rotationOrder: formData.get("rotationOrder"),
     notifyEnabled: formData.get("notifyEnabled") === "on",
-    notifyChannel: formData.get("notifyChannel"),
+    notifyEmail: formData.get("notifyEmail") === "on",
+    notifyTelegram: formData.get("notifyTelegram") === "on",
     notifyWeekday: formData.get("notifyWeekday"),
     notifyHour: formData.get("notifyHour"),
     telegramChatId: formData.get("telegramChatId") || undefined,

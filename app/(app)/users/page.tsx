@@ -22,7 +22,8 @@ export default async function UsersPage() {
       exitDate: true,
       rotationOrder: true,
       notifyEnabled: true,
-      notifyChannel: true,
+      notifyEmail: true,
+      notifyTelegram: true,
       notifyWeekday: true,
       notifyHour: true,
       telegramChatId: true,
@@ -67,7 +68,9 @@ export default async function UsersPage() {
                 )}
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {u.notifyEnabled ? `${u.notifyChannel} · Wochentag ${u.notifyWeekday}, ${u.notifyHour}:00` : "—"}
+                {u.notifyEnabled
+                  ? `${[u.notifyEmail && "E-Mail", u.notifyTelegram && "Telegram"].filter(Boolean).join(", ")} · Wochentag ${u.notifyWeekday}, ${u.notifyHour}:00`
+                  : "—"}
               </TableCell>
               <TableCell className="text-right">
                 <UserRowActions user={u} />

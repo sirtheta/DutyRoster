@@ -7,7 +7,7 @@ import prisma from "@/lib/prisma";
 import logger from "@/lib/logger";
 import { requireSession } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { dispatchPendingNotifications } from "@/lib/notifications";
+import { dispatchPendingNotifications, notifyChannelsFor } from "@/lib/notifications";
 import { notifyCalendarChange } from "@/lib/calendar-events";
 import { formatDateCH, parseDate, toDateString } from "@/lib/date";
 
@@ -35,9 +35,9 @@ const createSchema = z.object({
 async function notifyUser(userId: number, subject: string, body: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return;
-  const channel =
-    user.notifyChannel === "Telegram" && !user.telegramChatId ? "Email" : user.notifyChannel;
-  await prisma.pendingNotification.create({ data: { userId, channel, subject, body } });
+  for (const channel of notifyChannelsFor(user)) {
+    await prisma.pendingNotification.create({ data: { userId, channel, subject, body } });
+  }
   try {
     await dispatchPendingNotifications(prisma);
   } catch (err) {

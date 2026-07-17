@@ -132,7 +132,7 @@ describe("app actions", () => {
     const { updateOwnNotificationSettingsAction } = await import("@/app/(app)/actions");
     const res = await updateOwnNotificationSettingsAction(
       undefined,
-      formData({ notifyEnabled: "on", notifyChannel: "Email", notifyWeekday: "2", notifyHour: "9" })
+      formData({ notifyEnabled: "on", notifyEmail: "on", notifyWeekday: "2", notifyHour: "9" })
     );
 
     expect(res.success).toBe(true);
@@ -149,10 +149,36 @@ describe("app actions", () => {
     const { updateOwnNotificationSettingsAction } = await import("@/app/(app)/actions");
     const res = await updateOwnNotificationSettingsAction(
       undefined,
-      formData({ notifyEnabled: "on", notifyChannel: "Telegram" })
+      formData({ notifyEnabled: "on", notifyTelegram: "on" })
     );
 
     expect(res.error).toMatch(/Telegram Chat-ID/);
+  });
+
+  it("updateOwnNotificationSettingsAction requires at least one channel when enabled", async () => {
+    const user = await db.prisma.user.create({ data: createTestUser() });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { updateOwnNotificationSettingsAction } = await import("@/app/(app)/actions");
+    const res = await updateOwnNotificationSettingsAction(undefined, formData({ notifyEnabled: "on" }));
+
+    expect(res.error).toMatch(/mindestens einen Kanal/);
+  });
+
+  it("updateOwnNotificationSettingsAction allows enabling both Email and Telegram", async () => {
+    const user = await db.prisma.user.create({ data: createTestUser() });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { updateOwnNotificationSettingsAction } = await import("@/app/(app)/actions");
+    const res = await updateOwnNotificationSettingsAction(
+      undefined,
+      formData({ notifyEnabled: "on", notifyEmail: "on", notifyTelegram: "on", telegramChatId: "123" })
+    );
+
+    expect(res.success).toBe(true);
+    const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(updated.notifyEmail).toBe(true);
+    expect(updated.notifyTelegram).toBe(true);
   });
 
   it("sendTestNotificationAction sends a test email", async () => {

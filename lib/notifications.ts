@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import type { PrismaClient } from "@prisma/client";
+import type { NotifyChannel, PrismaClient } from "@prisma/client";
 import logger from "@/lib/logger";
 import { config } from "@/lib/config";
 import { sendPlanEmail } from "@/lib/email";
@@ -9,6 +9,26 @@ import { isValidTimeZone, parseDate, zonedParts } from "@/lib/date";
 import { TYPE_INFO } from "@/lib/entry-types";
 
 const log = logger.child({ module: "notifications" });
+
+/**
+ * Resolves which channel(s) a queued notification should go out on. A user
+ * can have both Email and Telegram enabled at once; if Telegram is enabled
+ * without a chat ID configured, it's dropped (falling back to Email if that's
+ * the only channel left) rather than failing delivery entirely.
+ */
+export function notifyChannelsFor(user: {
+  notifyEmail: boolean;
+  notifyTelegram: boolean;
+  telegramChatId: string | null;
+}): NotifyChannel[] {
+  const channels: NotifyChannel[] = [];
+  if (user.notifyEmail) channels.push("Email");
+  if (user.notifyTelegram) {
+    if (user.telegramChatId) channels.push("Telegram");
+    else if (!user.notifyEmail) channels.push("Email");
+  }
+  return channels;
+}
 
 const globalForScheduler = globalThis as unknown as {
   notificationSchedulerStarted?: boolean;
@@ -91,9 +111,11 @@ export async function queueDueNotifications(
     const subject = `Sanitätsplaner: Dein S-Dienst diese Woche`;
     const body = `Hallo ${user.name}\n\nDu hast diese Woche ${TYPE_INFO.S.label} an folgenden Tagen: ${dates}.`;
 
-    await prisma.pendingNotification.create({
-      data: { userId: user.id, channel: user.notifyChannel, subject, body },
-    });
+    for (const channel of notifyChannelsFor(user)) {
+      await prisma.pendingNotification.create({
+        data: { userId: user.id, channel, subject, body },
+      });
+    }
     queued++;
   }
   return queued;

@@ -25,7 +25,7 @@ function userFormData(fields: Record<string, string> = {}): FormData {
   fd.set("email", "new@example.com");
   fd.set("name", "New User");
   fd.set("role", "Editor");
-  fd.set("notifyChannel", "Email");
+  fd.set("notifyEmail", "on");
   fd.set("password", "password123");
   for (const [k, v] of Object.entries(fields)) fd.set(k, v);
   return fd;
