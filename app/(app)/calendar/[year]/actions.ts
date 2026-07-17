@@ -157,6 +157,7 @@ export async function bulkSetEntriesAction(
   }
 
   let count = 0;
+  const changedCells: { userId: number; date: string }[] = [];
   await prisma.$transaction(async (tx) => {
     for (const c of allowed) {
       if (type === null) {
@@ -165,6 +166,7 @@ export async function bulkSetEntriesAction(
         });
         if (existing) {
           await tx.entry.delete({ where: { id: existing.id } });
+          changedCells.push({ userId: c.userId, date: c.date });
           count++;
         }
       } else {
@@ -173,15 +175,21 @@ export async function bulkSetEntriesAction(
           create: { userId: c.userId, date: c.date, type, source: "Manual" },
           update: { type, source: "Manual" },
         });
+        changedCells.push({ userId: c.userId, date: c.date });
         count++;
       }
     }
   });
 
+  // Record which cells were touched, not just how many — capped so one giant
+  // bulk edit can't balloon a single audit row.
+  const MAX_AUDITED_CELLS = 1000;
   await logAudit(session, type === null ? "DELETE" : "UPDATE", "Entry", undefined, {
     bulk: true,
     count,
     type,
+    cells: changedCells.slice(0, MAX_AUDITED_CELLS),
+    ...(changedCells.length > MAX_AUDITED_CELLS ? { cellsTruncated: true } : {}),
   });
 
   for (const year of new Set(allowed.map((c) => c.date.slice(0, 4)))) {

@@ -88,7 +88,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       // Re-validate against the DB so demotion, deactivation, or a profile
       // edit (name/email) takes effect within a minute instead of only at
-      // JWT expiry (8h) / next login. Returning null invalidates the session.
+      // JWT expiry (default 7 days) / next login. Returning null invalidates
+      // the session.
       const ROLE_RECHECK_MS = 60_000;
       const checkedAt = typeof token.roleCheckedAt === "number" ? token.roleCheckedAt : 0;
       if (Date.now() - checkedAt > ROLE_RECHECK_MS) {

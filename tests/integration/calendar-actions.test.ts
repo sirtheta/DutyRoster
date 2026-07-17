@@ -116,6 +116,15 @@ describe("calendar actions", () => {
     expect(
       await prisma.entry.findUnique({ where: { userId_date: { userId: other.id, date: "2026-05-11" } } })
     ).toBeNull();
+
+    // The audit trail records which cells were touched, not just the count.
+    const audit = await prisma.auditLog.findFirstOrThrow({ where: { action: "UPDATE" } });
+    expect(JSON.parse(audit.details!)).toMatchObject({
+      bulk: true,
+      count: 1,
+      type: "S",
+      cells: [{ userId: other.id, date: "2026-05-04" }],
+    });
   });
 
   it("moves an S-Dienst to a free slot and logs the move with from/to details", async () => {
