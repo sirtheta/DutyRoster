@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.4.3](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.2...DutyRoster-v0.4.3) (2026-07-17)
+
+
+### Features
+
+* **auth:** self-service password reset via emailed link ([cd5d268](https://github.com/sirtheta/DutyRoster/commit/cd5d268b89b63bac7a4185e6738b88c24269cfee))
+* **backup:** nightly SQLite backup via VACUUM INTO with configurable retention ([22d46c1](https://github.com/sirtheta/DutyRoster/commit/22d46c12fd6a7eb31a68c2dcb3141f4fb7a16637))
+* **calendar:** highlight current day and scroll to it on load ([38eac6a](https://github.com/sirtheta/DutyRoster/commit/38eac6a8912283f22e823c4a80a2b2efa4e72f77))
+* **calendar:** show uncovered weeks directly in the calendar view ([6d54a92](https://github.com/sirtheta/DutyRoster/commit/6d54a923e5dd5c10b18ec528b6a727ac2975b321))
+* **dashboard:** duty overview with current, next, and uncovered weeks ([22848ac](https://github.com/sirtheta/DutyRoster/commit/22848acca456263158c47651ac561da4b5029477))
+* **help:** add in-app setup guides for Telegram bot and chat ID ([4a017e3](https://github.com/sirtheta/DutyRoster/commit/4a017e349e407528c840471b6554b322e1a32bf6))
+* **ical:** make Ferien inclusion in the iCal feed configurable per user ([#25](https://github.com/sirtheta/DutyRoster/issues/25)) ([33caeb1](https://github.com/sirtheta/DutyRoster/commit/33caeb16c47c40d33d81dfe8009e423c951e7f83))
+* **notifications:** allow selecting Email and Telegram together, fix settings dialog UX ([0200eaf](https://github.com/sirtheta/DutyRoster/commit/0200eafa199adfa28517c0e2029a974bbe70873b))
+* **rotation:** continue the rotation across year boundaries ([8f0d75c](https://github.com/sirtheta/DutyRoster/commit/8f0d75cd7babc3713ef570b5aac30f6ad233dafa))
+* **rotation:** cover blocked weeks with the next available user and report uncovered weeks ([9c6f3ad](https://github.com/sirtheta/DutyRoster/commit/9c6f3ad89a2563fd8a881aaa6b290a161bb5a7ef))
+* **settings:** show Telegram token status and add connection test ([00e985a](https://github.com/sirtheta/DutyRoster/commit/00e985a998f74204af3b0b58d9579cc3fae30a02))
+* **swap:** duty swap requests between users ([df5735d](https://github.com/sirtheta/DutyRoster/commit/df5735dd2d2ecdfe49173e085874b807c5075e43))
+
+
+### Bug Fixes
+
+* **audit:** record affected cells in bulk entry audit logs ([276a895](https://github.com/sirtheta/DutyRoster/commit/276a8956cae6bf1b00fdc220f12de607a7919ae0))
+* **calendar:** chunk bulk cell lookups to avoid the SQLite parameter limit ([9c8eaac](https://github.com/sirtheta/DutyRoster/commit/9c8eaac8daea161a1b47e9b4331e4dc2edc9f714))
+* **calendar:** stick legend toolbar below app header, not behind it ([0a2cba9](https://github.com/sirtheta/DutyRoster/commit/0a2cba973c7d049cb3c537aa91af47ac7f4fc4d7))
+* **email:** prevent mail clients from auto-linking dates in notification body ([d829fc8](https://github.com/sirtheta/DutyRoster/commit/d829fc821ea7fc2be2db309004aa91d28d5ed060))
+* **notifications:** cap delivery retries and prune old notification/audit rows ([e6cb8af](https://github.com/sirtheta/DutyRoster/commit/e6cb8afc506c8a61b98fedc165c7e7e8247ce338))
+* **notifications:** evaluate notify schedule in the app timezone ([3b9e39b](https://github.com/sirtheta/DutyRoster/commit/3b9e39b09337559b567d0c9139d4ee622d502f40))
+* **notifications:** show Swiss date format and date range for duty week ([741db11](https://github.com/sirtheta/DutyRoster/commit/741db111ce22fa0a60bc717201c0e7e088fab555))
+
 ## [0.4.2](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.1...DutyRoster-v0.4.2) (2026-07-17)
 
 
