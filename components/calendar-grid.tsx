@@ -19,6 +19,8 @@ interface CalendarGridProps {
   users: UserRow[];
   entries: EntryRow[];
   holidayNameByDate: Record<string, string>;
+  /** Workdays that belong to a week with no S-duty at all — highlighted in the date header. */
+  uncoveredDates?: Set<string>;
   currentUserId: number;
   role: UserRole;
 }
@@ -28,6 +30,7 @@ export function CalendarGrid({
   users,
   entries,
   holidayNameByDate,
+  uncoveredDates,
   currentUserId,
   role,
 }: CalendarGridProps) {
@@ -261,14 +264,16 @@ export function CalendarGrid({
 
   function renderDateHeaderCell(d: string, keyPrefix: string) {
     const weekend = isWeekend(d);
+    const uncovered = uncoveredDates?.has(d) ?? false;
     return (
       <th
         key={`${keyPrefix}-${d}`}
         className={cn(
           "min-w-[1.75rem] border-b border-l p-1 text-center font-normal text-muted-foreground",
-          (holidayNameByDate[d] || weekend) && "bg-muted"
+          (holidayNameByDate[d] || weekend) && "bg-muted",
+          uncovered && "bg-destructive/15 text-destructive"
         )}
-        title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
+        title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : uncovered ? "Ungedeckte Woche" : undefined)}
       >
         <div className="text-[0.65rem] leading-none">{weekdayAbbr(d)}</div>
         <div>{parseInt(d.slice(8, 10), 10)}</div>
@@ -372,15 +377,17 @@ export function CalendarGrid({
               <th className="sticky left-0 z-10 border-b bg-background p-1" />
               {dates.map((d) => {
                 const weekend = isWeekend(d);
+                const uncovered = uncoveredDates?.has(d) ?? false;
                 return (
                   <th
                     key={d}
                     className={cn(
                       "min-w-[1.75rem] border-b border-l p-1 text-center font-normal text-muted-foreground",
                       (holidayNameByDate[d] || weekend) && "bg-muted",
+                      uncovered && "bg-destructive/15 text-destructive",
                       d.slice(5) === dates[0].slice(5) && "border-l-2"
                     )}
-                    title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
+                    title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : uncovered ? "Ungedeckte Woche" : undefined)}
                   >
                     <div className="text-[0.65rem] leading-none">{weekdayAbbr(d)}</div>
                     <div>{parseInt(d.slice(8, 10), 10)}</div>

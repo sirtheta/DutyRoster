@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/permissions";
 import { ENTRY_TYPES } from "@/lib/entry-types";
 import { formatDateCH, parseDate, toDateString } from "@/lib/date";
 import { addDays } from "@/lib/date";
-import { isoWeekNumber, uncoveredWeekNumbers, weekRange } from "@/lib/week";
+import { isoWeekNumber, uncoveredWeeksInRange, weekRange } from "@/lib/week";
 import { holidaySetForYear } from "@/lib/holidays";
 import { DashboardChart } from "@/components/dashboard-chart";
 import { DutyOverviewCard } from "@/components/duty-overview-card";
@@ -60,7 +60,12 @@ export default async function DashboardPage({
   ];
   const dutyThisWeek = { weekNumber: isoWeekNumber(thisWeek.start), names: namesInRange(thisWeek.start, thisWeek.end) };
   const dutyNextWeek = { weekNumber: isoWeekNumber(nextWeek.start), names: namesInRange(nextWeek.start, nextWeek.end) };
-  const uncovered = uncoveredWeekNumbers(today, new Set(yearDuties.map((e) => e.date)), holidays);
+  const uncovered = uncoveredWeeksInRange(
+    today,
+    `${currentYear}-12-31`,
+    new Set(yearDuties.map((e) => e.date)),
+    holidays
+  ).map((w) => w.weekNumber);
 
   // Own upcoming S-duties grouped into calendar weeks — the units offered for
   // swapping. Weeks already part of an open request are hidden.

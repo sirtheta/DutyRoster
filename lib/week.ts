@@ -10,25 +10,36 @@ export function weekRange(date: Date): { start: string; end: string } {
   return { start, end };
 }
 
+export interface UncoveredWeek {
+  weekNumber: number;
+  /** Monday of the week (YYYY-MM-DD). */
+  start: string;
+  /** Non-holiday workdays of the week that fall within [from, to]. */
+  dates: string[];
+}
+
 /**
- * ISO week numbers (KW) of the Mon–Fri weeks from `fromDate`'s week to the
- * end of its year that have at least one non-holiday workday but no S-duty.
+ * The Mon–Fri weeks overlapping [`from`, `to`] (inclusive, YYYY-MM-DD) that
+ * have at least one non-holiday workday within that range but no S-duty on
+ * any of them. A week's first/last days are clipped to the range, so a week
+ * that starts or ends outside it (e.g. the year's first week starting in
+ * December of the previous year) is only judged on the days inside it.
  */
-export function uncoveredWeekNumbers(
-  fromDate: string,
+export function uncoveredWeeksInRange(
+  from: string,
+  to: string,
   sDutyDates: Set<string>,
   holidays: Set<string>
-): number[] {
-  const year = fromDate.slice(0, 4);
-  const result: number[] = [];
-  let monday = weekRange(parseDate(fromDate)!).start;
-  while (monday.slice(0, 4) <= year) {
+): UncoveredWeek[] {
+  const result: UncoveredWeek[] = [];
+  let monday = weekRange(parseDate(from)!).start;
+  while (monday <= to) {
     const days = [0, 1, 2, 3, 4]
       .map((i) => addDays(monday, i))
-      .filter((d) => d.slice(0, 4) === year);
+      .filter((d) => d >= from && d <= to);
     const workDays = days.filter((d) => !holidays.has(d));
     if (workDays.length > 0 && !workDays.some((d) => sDutyDates.has(d))) {
-      result.push(isoWeekNumber(workDays[0]));
+      result.push({ weekNumber: isoWeekNumber(workDays[0]), start: monday, dates: workDays });
     }
     monday = addDays(monday, 7);
   }
