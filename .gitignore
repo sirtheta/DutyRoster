@@ -28,6 +28,11 @@ next-env.d.ts
 
 # data / sqlite
 /data/*.db
+
+# playwright
+/tests/e2e/.data/
+/playwright-report/
+/test-results/
 /data/*.db-journal
 /data/*.db-wal
 /data/*.db-shm

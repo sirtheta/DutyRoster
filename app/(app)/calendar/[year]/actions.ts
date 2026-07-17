@@ -44,6 +44,27 @@ const moveSchema = z.object({
   toDate: dateSchema,
 });
 
+type EntryClient = { entry: Pick<typeof prisma.entry, "findMany"> };
+
+// SQLite's bound-parameter limit varies by build (999 on some, 32766 on
+// others) and each cell in an `OR` lookup binds 2 params (userId + date), so
+// a bulk action touching thousands of cells can exceed it in one query.
+// Chunking well under the lowest common limit keeps this safe everywhere.
+const CELL_QUERY_BATCH_SIZE = 400;
+
+/** Looks up entries for a batch of (userId, date) cells, chunked to stay under SQLite's parameter limit. */
+async function findEntriesForCells(client: EntryClient, cells: { userId: number; date: string }[]) {
+  const results: Prisma.EntryGetPayload<object>[] = [];
+  for (let i = 0; i < cells.length; i += CELL_QUERY_BATCH_SIZE) {
+    const batch = cells.slice(i, i + CELL_QUERY_BATCH_SIZE);
+    const found = await client.entry.findMany({
+      where: { OR: batch.map((c) => ({ userId: c.userId, date: c.date })) },
+    });
+    results.push(...found);
+  }
+  return results;
+}
+
 // Editors may act on other users' S-Dienst entries (create/clear/move), since
 // that's the shared duty roster. Every other entry type stays own-user-only
 // for Editors — Admin is unrestricted throughout.
@@ -135,9 +156,7 @@ export async function bulkSetEntriesAction(
 
   let existingTypes: Map<string, EntryType> | null = null;
   if (type === null) {
-    const existing = await prisma.entry.findMany({
-      where: { OR: cells.map((c) => ({ userId: c.userId, date: c.date })) },
-    });
+    const existing = await findEntriesForCells(prisma, cells);
     existingTypes = new Map(existing.map((e) => [`${e.userId}-${e.date}`, e.type]));
   }
 
@@ -157,6 +176,7 @@ export async function bulkSetEntriesAction(
   }
 
   let count = 0;
+  const changedCells: { userId: number; date: string }[] = [];
   await prisma.$transaction(async (tx) => {
     for (const c of allowed) {
       if (type === null) {
@@ -165,6 +185,7 @@ export async function bulkSetEntriesAction(
         });
         if (existing) {
           await tx.entry.delete({ where: { id: existing.id } });
+          changedCells.push({ userId: c.userId, date: c.date });
           count++;
         }
       } else {
@@ -173,15 +194,21 @@ export async function bulkSetEntriesAction(
           create: { userId: c.userId, date: c.date, type, source: "Manual" },
           update: { type, source: "Manual" },
         });
+        changedCells.push({ userId: c.userId, date: c.date });
         count++;
       }
     }
   });
 
+  // Record which cells were touched, not just how many — capped so one giant
+  // bulk edit can't balloon a single audit row.
+  const MAX_AUDITED_CELLS = 1000;
   await logAudit(session, type === null ? "DELETE" : "UPDATE", "Entry", undefined, {
     bulk: true,
     count,
     type,
+    cells: changedCells.slice(0, MAX_AUDITED_CELLS),
+    ...(changedCells.length > MAX_AUDITED_CELLS ? { cellsTruncated: true } : {}),
   });
 
   for (const year of new Set(allowed.map((c) => c.date.slice(0, 4)))) {
@@ -290,9 +317,10 @@ export async function moveEntriesAction(
     // check and the write; the unique (userId, date) constraint (caught as
     // P2002 below) is the final backstop if it still does.
     await prisma.$transaction(async (tx) => {
-      const sources = await tx.entry.findMany({
-        where: { OR: moves.map((m) => ({ userId: m.fromUserId, date: m.fromDate })) },
-      });
+      const sources = await findEntriesForCells(
+        tx,
+        moves.map((m) => ({ userId: m.fromUserId, date: m.fromDate }))
+      );
       const sourceMap = new Map(sources.map((s) => [`${s.userId}-${s.date}`, s]));
       for (const m of moves) {
         const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`);
@@ -303,9 +331,10 @@ export async function moveEntriesAction(
 
       // A destination is fine if it's empty, or if it's only occupied by one
       // of the entries in this same batch (which will be vacated by this move).
-      const destinations = await tx.entry.findMany({
-        where: { OR: moves.map((m) => ({ userId: m.toUserId, date: m.toDate })) },
-      });
+      const destinations = await findEntriesForCells(
+        tx,
+        moves.map((m) => ({ userId: m.toUserId, date: m.toDate }))
+      );
       for (const d of destinations) {
         if (!sourceKeys.has(`${d.userId}-${d.date}`)) {
           throw new Error("Zielzelle ist bereits belegt.");
@@ -349,14 +378,23 @@ export async function moveEntriesAction(
   return { count: moves.length };
 }
 
-export async function generateAutomationAction(rawYear: number): Promise<{ count: number }> {
+export async function generateAutomationAction(
+  rawYear: number
+): Promise<{ count: number; uncoveredWeeks: string[] }> {
   const session = await requireAdmin();
   const year = z.number().int().min(2000).max(2100).parse(rawYear);
 
-  const [users, holidays, existing] = await Promise.all([
+  const [users, holidays, existing, lastAutomatic] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { rotationOrder: "asc" } }),
     holidaySetForYear(year),
     prisma.entry.findMany({ where: { date: { startsWith: `${year}-` } } }),
+    // Whoever had the last automated duty before this year — the rotation
+    // continues after them instead of restarting at the first user.
+    prisma.entry.findFirst({
+      where: { type: "S", source: "Automatic", date: { lt: `${year}-01-01` } },
+      orderBy: { date: "desc" },
+      select: { userId: true },
+    }),
   ]);
 
   const blockedDates = new Map<number, Set<string>>();
@@ -369,12 +407,13 @@ export async function generateAutomationAction(rawYear: number): Promise<{ count
     existingKeys.add(`${e.userId}-${e.date}`);
   }
 
-  const assignments = runRotation({
+  const { assignments, uncoveredWeeks } = runRotation({
     year,
     users: users.map((u) => ({ userId: u.id, rotationOrder: u.rotationOrder })),
     holidays,
     blockedDates,
     occupiedDates,
+    startAfterUserId: lastAutomatic?.userId,
   });
 
   // Days that already have an entry (from an earlier run or manual edit)
@@ -394,8 +433,8 @@ export async function generateAutomationAction(rawYear: number): Promise<{ count
     }
   });
 
-  await logAudit(session, "AUTOMATIC", "Entry", undefined, { year, count });
+  await logAudit(session, "AUTOMATIC", "Entry", undefined, { year, count, uncoveredWeeks });
   revalidatePath(`/calendar/${year}`);
   notifyCalendarChange(year);
-  return { count };
+  return { count, uncoveredWeeks };
 }

@@ -50,9 +50,31 @@ jobs:
       - name: Build ausführen
         run: npm run build
 
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Chromium installieren
+        run: npx playwright install --with-deps chromium
+      - name: E2E-Tests ausführen
+        run: npx playwright test
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 14
+
   release-please:
     name: Release Please
-    needs: [lint, test-and-build]
+    needs: [lint, test-and-build, e2e]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -70,11 +92,12 @@ jobs:
 
   build-and-push:
     name: Docker Build & Push
-    needs: [lint, test-and-build, release-please]
+    needs: [lint, test-and-build, e2e, release-please]
     if: |
       always() &&
       needs.lint.result == 'success' &&
       needs['test-and-build'].result == 'success' &&
+      needs.e2e.result == 'success' &&
       (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04-arm
     permissions:

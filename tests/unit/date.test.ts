@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseDate, toDateString, addDays, datesOfYear, weekday, isWeekend, weekdayAbbr, formatDateCH } from "@/lib/date";
+import { parseDate, toDateString, addDays, datesOfYear, weekday, isWeekend, weekdayAbbr, formatDateCH, zonedParts, isValidTimeZone } from "@/lib/date";
 
 describe("date helpers", () => {
   it("parses YYYY-MM-DD as local midnight", () => {
@@ -57,5 +57,42 @@ describe("date helpers", () => {
     expect(weekdayAbbr("2026-01-03")).toBe("Sa");
     expect(weekdayAbbr("2026-01-04")).toBe("So");
     expect(weekdayAbbr("2026-01-05")).toBe("Mo");
+  });
+
+  it("zonedParts converts an instant into the target timezone", () => {
+    // 06:00 UTC on Monday 2026-03-02 is 07:00 CET in Zurich.
+    const instant = new Date("2026-03-02T06:00:00Z");
+    expect(zonedParts(instant, "Europe/Zurich")).toEqual({
+      weekday: 1,
+      hour: 7,
+      date: "2026-03-02",
+    });
+    expect(zonedParts(instant, "UTC")).toEqual({ weekday: 1, hour: 6, date: "2026-03-02" });
+  });
+
+  it("zonedParts respects DST (Zurich is CEST/+02:00 in summer)", () => {
+    const instant = new Date("2026-07-06T05:00:00Z");
+    expect(zonedParts(instant, "Europe/Zurich")).toEqual({
+      weekday: 1,
+      hour: 7,
+      date: "2026-07-06",
+    });
+  });
+
+  it("zonedParts crosses the day boundary correctly", () => {
+    // 23:30 UTC on Sunday is already 00:30 Monday in Zurich (CET).
+    const instant = new Date("2026-03-01T23:30:00Z");
+    expect(zonedParts(instant, "Europe/Zurich")).toEqual({
+      weekday: 1,
+      hour: 0,
+      date: "2026-03-02",
+    });
+  });
+
+  it("isValidTimeZone accepts IANA names and rejects garbage", () => {
+    expect(isValidTimeZone("Europe/Zurich")).toBe(true);
+    expect(isValidTimeZone("UTC")).toBe(true);
+    expect(isValidTimeZone("Not/AZone")).toBe(false);
+    expect(isValidTimeZone("")).toBe(false);
   });
 });

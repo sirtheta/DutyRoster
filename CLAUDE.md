@@ -30,6 +30,7 @@ npm test               # Run all tests (Vitest)
 npm run test:watch     # Watch mode
 npm run test:coverage  # Coverage report (v8)
 npm run test:integration  # Integration tests only
+npm run test:e2e       # Playwright E2E tests (starts its own dev server on :3111)
 # Run a single test file:
 npx vitest run tests/unit/rotation.test.ts
 ```
@@ -59,23 +60,28 @@ npx vitest run tests/unit/rotation.test.ts
 - In-memory rate limiting on login attempts (`lib/rate-limit.ts`)
 - JWT sessions, 7-day max age (configurable via `lib/config.ts`)
 - `user.role` (`Admin | Editor | Viewer`) is embedded in the JWT and carried into `session.user.role`
+- Self-service password reset (`lib/password-reset.ts`, `app/(auth)/forgot-password` + `reset-password`): emailed single-use link (SHA-256 hash stored, 1h TTL), generic responses to prevent account enumeration, rate-limited per email and IP
 
 **Authorization** (`lib/permissions.ts`):
 - `requireRole(roles)` / `requireAdmin()` / `requireEditor()` / `requireSession()` — call at the top of Server Components or Server Actions that need role gating; redirects to `/login` or `/calendar` on failure
 - `hasRole(session, roles)` — synchronous check for UI rendering
 
 **Duty rotation** (`lib/rotation.ts`):
-- `runRotation()` is a pure function: given a year, active users (sorted by `rotationOrder`), holidays, and each user's already-blocked/occupied dates, it assigns Mon–Fri work weeks to users round-robin
-- A week is skipped (rotation still advances) if the assigned user is blocked that week or the week is already covered by someone else; a fully-holiday week doesn't consume a turn at all
+- `runRotation()` is a pure function: given a year, active users (sorted by `rotationOrder`), holidays, and each user's already-blocked/occupied dates, it assigns Mon–Fri work weeks via a rotation queue and returns `{ assignments, uncoveredWeeks }`
+- If the user at the front of the queue is blocked that week, the next available user takes it and the blocked user keeps their place (gets the following week); a week is only reported uncovered when *every* user is blocked. Weeks already covered by someone's S-duty and fully-holiday weeks are skipped without consuming a turn
 - `EntryType` (`prisma/schema.prisma`): `S` (Sanität/duty), `F` (Ferien), `G` (geschäftliche Absenz), `C` (Kompensieren), `M` (Militär), `K` (Kurzarbeit), `TZ` (Teilzeit), `A` (Ausbildung), `H` (Homeoffice) — labels/colors in `lib/entry-types.ts`, and `AUTOMATION_BLOCKED` defines which types make a user unavailable for the automation
 
-**Notifications** (`lib/notifications.ts`): An hourly `node-cron` job (`startNotificationScheduler`, schedule from `NOTIFY_CRON_SCHEDULE`) matches each active user's configured weekday/hour, queues a `PendingNotification` if they have an S-Dienst that week, then dispatches via email (`lib/email.ts`) or Telegram (`lib/telegram.ts`) per `user.notifyChannel`.
+**Notifications** (`lib/notifications.ts`): An hourly `node-cron` job (`startNotificationScheduler`, schedule from `NOTIFY_CRON_SCHEDULE`) matches each active user's configured weekday/hour — evaluated in the app timezone (`NOTIFY_TIMEZONE`, default `Europe/Zurich`, independent of the server's TZ) — queues a `PendingNotification` if they have an S-Dienst that week, then dispatches via email (`lib/email.ts`) or Telegram (`lib/telegram.ts`) per `user.notifyChannel`. Failed sends are retried up to `NOTIFY_MAX_ATTEMPTS` times (then surfaced on the settings page with a manual retry), and old notification/audit rows are pruned per `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS`.
+
+**Duty swaps** (`app/(app)/swaps/actions.ts`, `SwapRequest` model): Any user (incl. Viewer) can offer their own upcoming S-duty week to a colleague from the dashboard. The colleague (or an Admin) accepts — which atomically moves the entries with `source: Swap` — or declines; both sides are notified via the `PendingNotification` queue and everything is audit-logged.
 
 **Encrypted settings**: SMTP password and Telegram bot token are AES-encrypted at rest in `SystemSettings` via `lib/crypto.ts`, using the `ENCRYPTION_KEY` env var.
 
 **iCal feed** (`app/api/ical/[token]/route.ts`): Per-user, token-authenticated (`User.icalToken`, 32 random bytes, rotatable from the dashboard) `.ics` feed of `F` and `S` entries — no session required, just the token. Failed token lookups are rate-limited per IP.
 
 **Audit logging** (`lib/audit.ts`): `logAudit(session, action, entityType, entityId, details)` writes to `AuditLog`; failures are logged but never thrown, so a broken audit trail never blocks the underlying mutation.
+
+**Backups** (`lib/backup.ts`): A nightly cron job (`BACKUP_CRON_SCHEDULE`, default 02:30 server time) writes a consistent SQLite snapshot via `VACUUM INTO` to `backups/` next to the database file (one file per day, `BACKUP_MAX_KEEP_DAYS` retention, default 14; `DISABLE_BACKUP=true` turns it off). In Docker that directory lives inside the data volume, so external syncs of `./data` include the backups.
 
 **Production startup** (`scripts/startup.js`): In the Docker image, this script applies pending Prisma migrations directly via `better-sqlite3` (no Prisma CLI in the image), seeds the first Admin user from env vars, and ensures a `SystemSettings` row exists before the Next.js server starts.
 
@@ -91,14 +97,19 @@ npx vitest run tests/unit/rotation.test.ts
 | `ADMIN_PASSWORD_HASH` | First run | Pre-hashed bcrypt alternative to `ADMIN_PASSWORD` |
 | `DEFAULT_CANTON` | No | ISO canton code for `date-holidays` seeding, defaults to `BE` |
 | `NOTIFY_CRON_SCHEDULE` | No | Cron expression for the hourly notification check, defaults to `0 * * * *` |
-| `ROTATION_BLOCK_SIZE` | No | Default consecutive-day block size for the yearly rotation automation |
-| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` | No | Dev/staging switches to suppress outgoing notifications |
+| `NOTIFY_TIMEZONE` | No | IANA timezone for users' notification weekday/hour, defaults to `Europe/Zurich` |
+| `NOTIFY_MAX_ATTEMPTS` | No | Delivery attempts per notification before giving up, defaults to `3` |
+| `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS` | No | Days to keep notification / audit rows (`0` = forever), default `90` / `365` |
+| `BACKUP_CRON_SCHEDULE` / `BACKUP_MAX_KEEP_DAYS` | No | Nightly DB backup schedule (default `30 2 * * *`) and retention in days (default `14`, `0` = keep all) |
+| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` / `DISABLE_BACKUP` | No | Dev/staging switches to suppress outgoing notifications / backups |
 
 See `.env.example` for the full list, including session/rate-limit/logging overrides.
 
 ### Testing
 
 Tests live in `tests/unit/` and `tests/integration/`. Integration tests use an in-memory or temp SQLite database (configured in `tests/setup.ts`). Coverage is collected only for `lib/**/*.ts` and `app/api/**/*.ts`.
+
+Playwright E2E smoke tests live in `tests/e2e/` (`npm run test:e2e`): the config boots a dev server on port 3111 against a freshly seeded SQLite DB (`tests/e2e/global-setup.ts`, admin login `admin@e2e.local`). CI runs them in the `e2e` job (`npx playwright install chromium` first).
 
 ---
 

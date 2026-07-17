@@ -5,6 +5,7 @@ import { config } from "@/lib/config";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { weekRange } from "@/lib/week";
+import { isValidTimeZone, parseDate, zonedParts } from "@/lib/date";
 import { TYPE_INFO } from "@/lib/entry-types";
 
 const log = logger.child({ module: "notifications" });
@@ -20,16 +21,28 @@ export function startNotificationScheduler(): void {
     log.error({ schedule }, "Invalid NOTIFY_CRON_SCHEDULE — scheduler not started");
     return;
   }
-  cron.schedule(schedule, async () => {
-    log.info("Running hourly notification check");
-    const { default: prisma } = await import("@/lib/prisma");
-    try {
-      await queueDueNotifications(prisma);
-      await dispatchPendingNotifications(prisma);
-    } catch (err) {
-      log.error({ err }, "Hourly notification cron failed");
-    }
-  });
+  const timezone = config.notifications.timezone;
+  if (!isValidTimeZone(timezone)) {
+    log.error({ timezone }, "Invalid NOTIFY_TIMEZONE — scheduler not started");
+    return;
+  }
+  cron.schedule(
+    schedule,
+    async () => {
+      log.info("Running hourly notification check");
+      const { default: prisma } = await import("@/lib/prisma");
+      try {
+        await queueDueNotifications(prisma);
+        await dispatchPendingNotifications(prisma);
+        await pruneExpiredNotifications(prisma);
+        const { pruneExpiredAuditLogs } = await import("@/lib/audit");
+        await pruneExpiredAuditLogs(prisma);
+      } catch (err) {
+        log.error({ err }, "Hourly notification cron failed");
+      }
+    },
+    { timezone }
+  );
   globalForScheduler.notificationSchedulerStarted = true;
   log.info({ schedule }, "Notification scheduler started");
 }
@@ -46,9 +59,10 @@ export async function queueDueNotifications(
   opts: { force?: boolean } = {}
 ): Promise<number> {
   const { force = false } = opts;
-  const weekday = now.getDay();
-  const hour = now.getHours();
-  const { start, end } = weekRange(now);
+  // Users configure weekday/hour in the app timezone (NOTIFY_TIMEZONE), so
+  // evaluate `now` there — the server itself may run in UTC (e.g. Docker).
+  const { weekday, hour, date: today } = zonedParts(now, config.notifications.timezone);
+  const { start, end } = weekRange(parseDate(today)!);
 
   const dueUsers = await prisma.user.findMany({
     where: {
@@ -85,10 +99,15 @@ export async function queueDueNotifications(
   return queued;
 }
 
-/** Sends all not-yet-sent PendingNotification rows and stamps sentAt/failedAt. */
+/**
+ * Sends all not-yet-sent PendingNotification rows and stamps sentAt/failedAt.
+ * Rows that failed fewer than NOTIFY_MAX_ATTEMPTS times are retried on the
+ * next run; after that they stay marked failed (visible on the settings page)
+ * instead of being re-attempted every hour forever.
+ */
 export async function dispatchPendingNotifications(prisma: PrismaClient): Promise<void> {
   const pending = await prisma.pendingNotification.findMany({
-    where: { sentAt: null },
+    where: { sentAt: null, attempts: { lt: config.notifications.maxAttempts } },
     include: { user: true },
   });
   if (pending.length === 0) return;
@@ -111,14 +130,37 @@ export async function dispatchPendingNotifications(prisma: PrismaClient): Promis
       }
       await prisma.pendingNotification.update({
         where: { id: notification.id },
-        data: { sentAt: new Date() },
+        data: { sentAt: new Date(), failedAt: null, error: null, attempts: { increment: 1 } },
       });
     } catch (err) {
       log.error({ err, notificationId: notification.id }, "Failed to dispatch notification");
       await prisma.pendingNotification.update({
         where: { id: notification.id },
-        data: { failedAt: new Date(), error: err instanceof Error ? err.message : String(err) },
+        data: {
+          failedAt: new Date(),
+          error: err instanceof Error ? err.message : String(err),
+          attempts: { increment: 1 },
+        },
       });
     }
   }
+}
+
+/**
+ * Deletes PendingNotification rows older than the retention window
+ * (NOTIFY_RETENTION_DAYS, 0 = keep forever) so the queue table doesn't grow
+ * without bound. Returns the number of deleted rows.
+ */
+export async function pruneExpiredNotifications(
+  prisma: PrismaClient,
+  now = new Date()
+): Promise<number> {
+  const days = config.notifications.retentionDays;
+  if (days <= 0) return 0;
+  const cutoff = new Date(now.getTime() - days * 86_400_000);
+  const { count } = await prisma.pendingNotification.deleteMany({
+    where: { createdAt: { lt: cutoff } },
+  });
+  if (count > 0) log.info({ count, days }, "Pruned expired notifications");
+  return count;
 }

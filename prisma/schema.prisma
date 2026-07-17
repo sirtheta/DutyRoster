@@ -37,7 +37,7 @@ model User {
   notifyEnabled  Boolean       @default(false)
   notifyChannel  NotifyChannel @default(Email)
   notifyWeekday  Int           @default(1) // 0=Sun ... 6=Sat, default Monday
-  notifyHour     Int           @default(7) // hour (0-23) local Europe/Zurich
+  notifyHour     Int           @default(7) // hour (0-23) in the app timezone (NOTIFY_TIMEZONE, default Europe/Zurich)
   telegramChatId String?
 
   // Bearer token for the personal iCal feed. Created as 32 random bytes
@@ -51,11 +51,61 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  entries       Entry[]
-  auditLogs     AuditLog[]
-  notifications PendingNotification[]
+  entries             Entry[]
+  auditLogs           AuditLog[]
+  notifications       PendingNotification[]
+  passwordResetTokens PasswordResetToken[]
+  swapRequestsFrom    SwapRequest[]         @relation("SwapRequestsFrom")
+  swapRequestsTo      SwapRequest[]         @relation("SwapRequestsTo")
 
   @@index([rotationOrder])
+}
+
+// ── Duty swap requests ─────────────────────────────────────────────────────────
+
+enum SwapRequestStatus {
+  Pending
+  Accepted
+  Declined
+  Cancelled
+}
+
+model SwapRequest {
+  id         Int               @id @default(autoincrement())
+  // Requester who currently holds the S-duties …
+  fromUserId Int
+  // … and the colleague asked to take them over.
+  toUserId   Int
+  // JSON array of YYYY-MM-DD strings (the S-duty days to hand over).
+  dates      String
+  comment    String?
+  status     SwapRequestStatus @default(Pending)
+  createdAt  DateTime          @default(now())
+  decidedAt  DateTime?
+
+  fromUser User @relation("SwapRequestsFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("SwapRequestsTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([fromUserId])
+  @@index([toUserId])
+}
+
+// ── Password reset ─────────────────────────────────────────────────────────────
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  // SHA-256 of the raw token; the raw token only ever exists in the email
+  // link, so a leaked DB row can't be used to reset a password.
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ── Duty/absence types ─────────────────────────────────────────────────────────
@@ -157,6 +207,8 @@ model PendingNotification {
   sentAt    DateTime?
   failedAt  DateTime?
   error     String?
+  // Delivery attempts so far; rows at NOTIFY_MAX_ATTEMPTS are no longer retried.
+  attempts  Int           @default(0)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

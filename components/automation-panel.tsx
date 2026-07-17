@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { generateAutomationAction } from "@/app/(app)/calendar/[year]/actions";
+import { isoWeekNumber } from "@/lib/week";
 
 export function AutomationPanel({ year }: { year: number }) {
   const router = useRouter();
@@ -13,8 +14,14 @@ export function AutomationPanel({ year }: { year: number }) {
 
   function generate() {
     startTransition(async () => {
-      const { count } = await generateAutomationAction(year);
+      const { count, uncoveredWeeks } = await generateAutomationAction(year);
       toast.success(`${count} Dienste für ${year} eingeplant.`);
+      if (uncoveredWeeks.length > 0) {
+        const weekList = uncoveredWeeks.map((d) => `KW ${isoWeekNumber(d)}`).join(", ");
+        toast.warning(`Keine verfügbare Person für: ${weekList}. Diese Wochen sind ungedeckt.`, {
+          duration: 10000,
+        });
+      }
       router.refresh();
     });
   }

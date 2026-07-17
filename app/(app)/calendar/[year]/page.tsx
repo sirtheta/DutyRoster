@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { requireSession } from "@/lib/permissions";
+import { uncoveredWeeksInRange } from "@/lib/week";
 import { CalendarGrid } from "@/components/calendar-grid";
 import { AutomationPanel } from "@/components/automation-panel";
+import { UncoveredWeeksBanner } from "@/components/uncovered-weeks-banner";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -33,6 +35,16 @@ export default async function CalendarPage({
 
   const holidayNameByDate = new Map(holidays.map((h) => [h.date, h.name]));
 
+  const sDutyDates = new Set(entries.filter((e) => e.type === "S").map((e) => e.date));
+  const holidayDates = new Set(holidays.map((h) => h.date));
+  const uncoveredWeeks = uncoveredWeeksInRange(
+    `${year}-01-01`,
+    `${year}-12-31`,
+    sDutyDates,
+    holidayDates
+  );
+  const uncoveredDates = new Set(uncoveredWeeks.flatMap((w) => w.dates));
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -56,11 +68,14 @@ export default async function CalendarPage({
 
       {session.user.role === "Admin" && <AutomationPanel year={year} />}
 
+      <UncoveredWeeksBanner weekNumbers={uncoveredWeeks.map((w) => w.weekNumber)} />
+
       <CalendarGrid
         year={year}
         users={users}
         entries={entries}
         holidayNameByDate={Object.fromEntries(holidayNameByDate)}
+        uncoveredDates={uncoveredDates}
         currentUserId={Number(session.user.id)}
         role={session.user.role}
       />

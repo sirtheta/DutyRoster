@@ -14,7 +14,10 @@ Ein Dienstplanungstool für das Sanitätsteam eines Unternehmens. Die Anwendung 
 - **iCal-Feed** – persönlicher, token-basierter Kalender-Export (Dienste & Ferien) für Kalender-Apps
 - **Excel-Export** – Jahresplan als Excel-Datei exportierbar
 - **Benutzerverwaltung** – Rollen (Admin, Editor, Viewer), Rotationsreihenfolge, Benachrichtigungskanal pro Person
+- **Passwort zurücksetzen** – Self-Service per E-Mail-Link („Passwort vergessen?“ auf der Anmeldeseite)
+- **Diensttausch** – Tauschanfragen an Kolleg:innen direkt vom Dashboard; beim Annehmen werden die Dienste automatisch übertragen
 - **Audit-Log** – protokolliert Änderungen an Plänen und Einstellungen
+- **Nächtliche Backups** – tägliche SQLite-Sicherung (`VACUUM INTO`) in den Datenordner, mit konfigurierbarer Aufbewahrungsdauer
 
 ## Technologie-Stack
 
@@ -56,6 +59,7 @@ npm test                   # Alle Tests
 npm run test:watch         # Tests im Watch-Modus
 npm run test:coverage      # Testabdeckung
 npm run test:integration   # Nur Integrationstests
+npm run test:e2e           # Playwright-E2E-Tests (startet eigenen Dev-Server)
 ```
 
 ## Konfiguration
@@ -71,8 +75,14 @@ Die wichtigsten Umgebungsvariablen (vollständige Liste in `.env.example`):
 | `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_PASSWORD` | Beim ersten Start | Erstellt den initialen Admin-Benutzer |
 | `DEFAULT_CANTON` | Nein | ISO-Kantonscode für die Feiertagsseedung (Standard: `BE`) |
 | `NOTIFY_CRON_SCHEDULE` | Nein | Cron-Ausdruck für die stündliche Benachrichtigungsprüfung |
-| `ROTATION_BLOCK_SIZE` | Nein | Standard-Blockgrösse (aufeinanderfolgende Tage) für die Rotationsautomatik |
-| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` | Nein | Deaktiviert ausgehende Benachrichtigungen (für Entwicklung/Staging) |
+| `BACKUP_CRON_SCHEDULE` / `BACKUP_MAX_KEEP_DAYS` | Nein | Zeitplan der nächtlichen DB-Sicherung (Standard: 02:30) und Aufbewahrung in Tagen (Standard: 14, `0` = alle behalten) |
+| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` / `DISABLE_BACKUP` | Nein | Deaktiviert ausgehende Benachrichtigungen bzw. Backups (für Entwicklung/Staging) |
+
+## Backups & Wiederherstellung
+
+Die Anwendung erstellt jede Nacht (Standard: 02:30) eine konsistente Kopie der SQLite-Datenbank per `VACUUM INTO` unter `<Datenordner>/backups/DutyRoster-backup-YYYY-MM-DD.db`. Alte Sicherungen werden nach `BACKUP_MAX_KEEP_DAYS` Tagen (Standard: 14) automatisch gelöscht. Wer den Datenordner ohnehin extern sichert (z.&nbsp;B. auf ein NAS), erhält die Backups damit automatisch mit.
+
+**Wiederherstellung:** Container stoppen, die gewünschte Backup-Datei über die Datenbankdatei kopieren (`cp data/backups/DutyRoster-backup-….db data/dutyroster.db`), allfällige `*-wal`/`*-shm`-Dateien daneben löschen und den Container wieder starten.
 
 ## Projektstruktur
 

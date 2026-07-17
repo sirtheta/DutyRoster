@@ -1,9 +1,15 @@
-import { headers } from "next/headers";
 import prisma from "@/lib/prisma";
+import { appOrigin } from "@/lib/origin";
 import { requireSession } from "@/lib/permissions";
 import { ENTRY_TYPES } from "@/lib/entry-types";
+import { formatDateCH, parseDate, toDateString } from "@/lib/date";
+import { addDays } from "@/lib/date";
+import { isoWeekNumber, uncoveredWeeksInRange, weekRange } from "@/lib/week";
+import { holidaySetForYear } from "@/lib/holidays";
 import { DashboardChart } from "@/components/dashboard-chart";
+import { DutyOverviewCard } from "@/components/duty-overview-card";
 import { IcalSubscribeCard } from "@/components/ical-subscribe-card";
+import { SwapRequestsCard } from "@/components/swap-requests-card";
 
 export default async function DashboardPage({
   searchParams,
@@ -11,17 +17,92 @@ export default async function DashboardPage({
   searchParams: Promise<{ year?: string }>;
 }) {
   const session = await requireSession();
+  const userId = Number(session.user.id);
   const { year: yearParam } = await searchParams;
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
+  const now = new Date();
+  const today = toDateString(now);
+  const currentYear = today.slice(0, 4);
+  const thisWeek = weekRange(now);
+  const nextWeek = weekRange(parseDate(addDays(thisWeek.start, 7))!);
 
-  const [users, entries, currentUser] = await Promise.all([
+  const [users, entries, currentUser, upcomingDuties, pendingSwaps, dutyEntries, yearDuties, holidays] =
+    await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { rotationOrder: "asc" } }),
     prisma.entry.findMany({ where: { date: { startsWith: `${year}-` } } }),
     prisma.user.findUnique({
-      where: { id: Number(session.user.id) },
+      where: { id: userId },
       select: { icalToken: true, icalIncludeVacation: true },
     }),
+    prisma.entry.findMany({
+      where: { userId, type: "S", date: { gte: today } },
+      orderBy: { date: "asc" },
+      take: 60,
+    }),
+    prisma.swapRequest.findMany({
+      where: { status: "Pending", OR: [{ fromUserId: userId }, { toUserId: userId }] },
+      include: { fromUser: { select: { name: true } }, toUser: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.entry.findMany({
+      where: { type: "S", date: { gte: thisWeek.start, lte: nextWeek.end } },
+      include: { user: { select: { name: true } } },
+    }),
+    prisma.entry.findMany({
+      where: { type: "S", date: { startsWith: `${currentYear}-` } },
+      select: { date: true },
+    }),
+    holidaySetForYear(Number(currentYear)),
   ]);
+
+  const namesInRange = (start: string, end: string) => [
+    ...new Set(dutyEntries.filter((e) => e.date >= start && e.date <= end).map((e) => e.user.name)),
+  ];
+  const dutyThisWeek = { weekNumber: isoWeekNumber(thisWeek.start), names: namesInRange(thisWeek.start, thisWeek.end) };
+  const dutyNextWeek = { weekNumber: isoWeekNumber(nextWeek.start), names: namesInRange(nextWeek.start, nextWeek.end) };
+  const uncovered = uncoveredWeeksInRange(
+    today,
+    `${currentYear}-12-31`,
+    new Set(yearDuties.map((e) => e.date)),
+    holidays
+  ).map((w) => w.weekNumber);
+
+  // Own upcoming S-duties grouped into calendar weeks — the units offered for
+  // swapping. Weeks already part of an open request are hidden.
+  const weekGroups = new Map<string, string[]>();
+  for (const e of upcomingDuties) {
+    const { start } = weekRange(parseDate(e.date)!);
+    if (!weekGroups.has(start)) weekGroups.set(start, []);
+    weekGroups.get(start)!.push(e.date);
+  }
+  const requestedDates = new Set(
+    pendingSwaps
+      .filter((r) => r.fromUserId === userId)
+      .flatMap((r) => JSON.parse(r.dates) as string[])
+  );
+  const myWeeks = [...weekGroups.entries()]
+    .filter(([, dates]) => dates.every((d) => !requestedDates.has(d)))
+    .map(([start, dates]) => ({
+      key: start,
+      label: `KW ${isoWeekNumber(dates[0])} (${formatDateCH(dates[0])} – ${formatDateCH(dates[dates.length - 1])})`,
+      dates,
+    }));
+
+  const toSwapRow = (r: (typeof pendingSwaps)[number], otherName: string) => ({
+    id: r.id,
+    otherName,
+    datesLabel: (JSON.parse(r.dates) as string[]).map(formatDateCH).join(", "),
+    comment: r.comment,
+  });
+  const incoming = pendingSwaps
+    .filter((r) => r.toUserId === userId)
+    .map((r) => toSwapRow(r, r.fromUser.name));
+  const outgoing = pendingSwaps
+    .filter((r) => r.fromUserId === userId)
+    .map((r) => toSwapRow(r, r.toUser.name));
+  const colleagues = users
+    .filter((u) => u.id !== userId)
+    .map((u) => ({ id: u.id, name: u.name }));
 
   const data = users.map((u) => {
     const row: Record<string, string | number> = { name: u.name };
@@ -32,20 +113,23 @@ export default async function DashboardPage({
     return row;
   });
 
-  // Prefer the configured canonical origin; the Host header is only a
-  // fallback for setups without AUTH_URL (it is client-controlled input).
-  let origin = process.env.AUTH_URL?.replace(/\/+$/, "");
-  if (!origin) {
-    const host = (await headers()).get("host");
-    const proto = process.env.NODE_ENV === "production" ? "https" : "http";
-    origin = `${proto}://${host}`;
-  }
-  const icalUrl = currentUser ? `${origin}/api/ical/${currentUser.icalToken}` : "";
+  const icalUrl = currentUser ? `${await appOrigin()}/api/ical/${currentUser.icalToken}` : "";
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl">Dashboard {year}</h1>
+      <DutyOverviewCard
+        thisWeek={dutyThisWeek}
+        nextWeek={dutyNextWeek}
+        uncoveredWeekNumbers={uncovered}
+      />
       <DashboardChart data={data} year={year} />
+      <SwapRequestsCard
+        myWeeks={myWeeks}
+        colleagues={colleagues}
+        incoming={incoming}
+        outgoing={outgoing}
+      />
       <IcalSubscribeCard url={icalUrl} includeVacation={currentUser?.icalIncludeVacation ?? true} />
     </div>
   );
