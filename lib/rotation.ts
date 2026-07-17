@@ -23,6 +23,13 @@ export interface RotationOptions {
    * already covered, regardless of who the rotation would otherwise assign.
    */
   occupiedDates: Set<string>;
+  /**
+   * User who had the last rotation turn before this year: the queue starts
+   * with the user *after* them in rotationOrder, so the year boundary doesn't
+   * reset the rotation to the first user every January. Ignored when the user
+   * isn't in `users` (e.g. deactivated since).
+   */
+  startAfterUserId?: number;
 }
 
 export interface RotationAssignment {
@@ -54,6 +61,9 @@ export function runRotation(options: RotationOptions): RotationResult {
   const { year, holidays, blockedDates, occupiedDates } = options;
   const queue = [...options.users].sort((a, b) => a.rotationOrder - b.rotationOrder);
   if (queue.length === 0) return { assignments: [], uncoveredWeeks: [] };
+
+  const startIndex = queue.findIndex((u) => u.userId === options.startAfterUserId);
+  if (startIndex !== -1) queue.push(...queue.splice(0, startIndex + 1));
 
   const assignments: RotationAssignment[] = [];
   const uncoveredWeeks: string[] = [];

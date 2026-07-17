@@ -150,6 +150,41 @@ describe("runRotation", () => {
     expect(week2.every((a) => a.userId === 1)).toBe(true);
   });
 
+  it("continues after startAfterUserId instead of restarting at the lowest rotationOrder", () => {
+    const { assignments } = runRotation({
+      year: 2026,
+      users: [
+        { userId: 1, rotationOrder: 0 },
+        { userId: 2, rotationOrder: 1 },
+        { userId: 3, rotationOrder: 2 },
+      ],
+      holidays: new Set(),
+      blockedDates: new Map(),
+      occupiedDates: new Set(),
+      startAfterUserId: 2, // user 2 had the last week of the previous year
+    });
+    const firstWeek = assignments.filter((a) => a.date <= "2026-01-02");
+    expect(firstWeek.every((a) => a.userId === 3)).toBe(true);
+    const secondWeek = assignments.filter((a) => a.date >= "2026-01-05" && a.date <= "2026-01-09");
+    expect(secondWeek.every((a) => a.userId === 1)).toBe(true);
+  });
+
+  it("ignores startAfterUserId when that user is no longer in the rotation", () => {
+    const { assignments } = runRotation({
+      year: 2026,
+      users: [
+        { userId: 1, rotationOrder: 0 },
+        { userId: 2, rotationOrder: 1 },
+      ],
+      holidays: new Set(),
+      blockedDates: new Map(),
+      occupiedDates: new Set(),
+      startAfterUserId: 99, // deactivated since last year
+    });
+    const firstWeek = assignments.filter((a) => a.date <= "2026-01-02");
+    expect(firstWeek.every((a) => a.userId === 1)).toBe(true);
+  });
+
   it("returns no assignments when there are no active users", () => {
     const result = runRotation({
       year: 2026,

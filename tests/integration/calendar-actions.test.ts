@@ -352,6 +352,30 @@ describe("calendar actions", () => {
     expect(adminEntries).toHaveLength(0);
   });
 
+  it("continues the rotation after the previous year's last automated duty", async () => {
+    const { prisma } = db;
+    const admin = await prisma.user.create({
+      data: createTestUser({ email: "admin@example.com", role: "Admin", rotationOrder: 0 }),
+    });
+    const second = await prisma.user.create({
+      data: createTestUser({ email: "second@example.com", role: "Editor", rotationOrder: 1 }),
+    });
+    // `admin` had the last automated week of 2025, so 2026 must start with `second`.
+    await prisma.entry.create({
+      data: { userId: admin.id, date: "2025-12-29", type: "S", source: "Automatic" },
+    });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { generateAutomationAction } = await import("@/app/(app)/calendar/[year]/actions");
+    await generateAutomationAction(2026);
+
+    const firstWeek = await prisma.entry.findMany({
+      where: { date: { in: ["2026-01-01", "2026-01-02"] }, type: "S" },
+    });
+    expect(firstWeek).toHaveLength(2);
+    expect(firstWeek.every((e) => e.userId === second.id)).toBe(true);
+  });
+
   it("rejects malformed and impossible dates", async () => {
     const { prisma } = db;
     const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });

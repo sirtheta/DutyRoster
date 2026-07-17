@@ -355,10 +355,17 @@ export async function generateAutomationAction(
   const session = await requireAdmin();
   const year = z.number().int().min(2000).max(2100).parse(rawYear);
 
-  const [users, holidays, existing] = await Promise.all([
+  const [users, holidays, existing, lastAutomatic] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { rotationOrder: "asc" } }),
     holidaySetForYear(year),
     prisma.entry.findMany({ where: { date: { startsWith: `${year}-` } } }),
+    // Whoever had the last automated duty before this year — the rotation
+    // continues after them instead of restarting at the first user.
+    prisma.entry.findFirst({
+      where: { type: "S", source: "Automatic", date: { lt: `${year}-01-01` } },
+      orderBy: { date: "desc" },
+      select: { userId: true },
+    }),
   ]);
 
   const blockedDates = new Map<number, Set<string>>();
@@ -377,6 +384,7 @@ export async function generateAutomationAction(
     holidays,
     blockedDates,
     occupiedDates,
+    startAfterUserId: lastAutomatic?.userId,
   });
 
   // Days that already have an entry (from an earlier run or manual edit)
