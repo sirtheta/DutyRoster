@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.2](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.1...DutyRoster-v0.4.2) (2026-07-17)
+
+
+### Features
+
+* add version and copyright footer ([#20](https://github.com/sirtheta/DutyRoster/issues/20)) ([1a1c54f](https://github.com/sirtheta/DutyRoster/commit/1a1c54f1ef5d9fc7cb2bf376e6f2388cf6753904))
+* **calendar:** add drag-to-select and per-user row tinting ([#23](https://github.com/sirtheta/DutyRoster/issues/23)) ([7d0460a](https://github.com/sirtheta/DutyRoster/commit/7d0460a716a567e2eaae03eed1ebdc398dc35d34))
+* **settings:** add SMTP connection test button ([#22](https://github.com/sirtheta/DutyRoster/issues/22)) ([de110c9](https://github.com/sirtheta/DutyRoster/commit/de110c9b65cdefee0ed1cf38e70962c523030e05))
+* **ui:** align design system with CustomerManagement ([262762c](https://github.com/sirtheta/DutyRoster/commit/262762c2e687acb90af6cfb45f68698d72794b13))
+* **users:** add exit-date termination flow that preserves duty history ([#18](https://github.com/sirtheta/DutyRoster/issues/18)) ([616f890](https://github.com/sirtheta/DutyRoster/commit/616f890b8c1d701163b557c378eb59688c699688))
+* **users:** implement rotation order insertion with automatic shifting ([#21](https://github.com/sirtheta/DutyRoster/issues/21)) ([80711fb](https://github.com/sirtheta/DutyRoster/commit/80711fb9ff9e8eed1e1dfac6cf9cd1a725fe3509))
+
+
+### Bug Fixes
+
+* **auth:** default session duration to 7 days ([6ff559c](https://github.com/sirtheta/DutyRoster/commit/6ff559cbb4ed0f5516d8923e8b3790020ce717f9))
+* **auth:** default session duration to 7 days and UI improvements ([8aa9334](https://github.com/sirtheta/DutyRoster/commit/8aa9334adf96ee0d3c881e3298b59ec0bdbdb710))
+
 ## [0.4.1](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.0...DutyRoster-v0.4.1) (2026-07-16)
 
 
