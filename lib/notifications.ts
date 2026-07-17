@@ -5,7 +5,7 @@ import { config } from "@/lib/config";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { weekRange } from "@/lib/week";
-import { isValidTimeZone, parseDate, zonedParts } from "@/lib/date";
+import { formatDateCH, isValidTimeZone, parseDate, zonedParts } from "@/lib/date";
 import { TYPE_INFO } from "@/lib/entry-types";
 
 const log = logger.child({ module: "notifications" });
@@ -107,9 +107,11 @@ export async function queueDueNotifications(
       if (alreadyQueued) continue;
     }
 
-    const dates = sDuties.map((e) => e.date).join(", ");
+    const firstDate = formatDateCH(sDuties[0].date);
+    const lastDate = formatDateCH(sDuties[sDuties.length - 1].date);
+    const dateRange = firstDate === lastDate ? `am ${firstDate}` : `von ${firstDate} bis ${lastDate}`;
     const subject = `Sanitätsplaner: Dein S-Dienst diese Woche`;
-    const body = `Hallo ${user.name}\n\nDu hast diese Woche ${TYPE_INFO.S.label} an folgenden Tagen: ${dates}.`;
+    const body = `Hallo ${user.name}\n\nDu hast diese Woche ${TYPE_INFO.S.label} ${dateRange}.`;
 
     const channels = notifyChannelsFor(user);
     if (channels.length === 0) continue;
