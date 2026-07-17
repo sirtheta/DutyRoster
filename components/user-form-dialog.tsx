@@ -96,6 +96,7 @@ export function UserFormDialog({
               id="rotationOrder"
               name="rotationOrder"
               type="number"
+              min={0}
               defaultValue={user?.rotationOrder ?? 0}
             />
           </div>

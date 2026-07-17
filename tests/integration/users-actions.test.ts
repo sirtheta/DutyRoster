@@ -60,6 +60,23 @@ describe("users actions", () => {
     expect(audit.entityId).toBe(created.id);
   });
 
+  it("shifts existing users back when a new user is inserted at their rotation position", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin", rotationOrder: 0 }) });
+    const second = await db.prisma.user.create({
+      data: createTestUser({ email: "second@example.com", rotationOrder: 1 }),
+    });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { createUserAction } = await import("@/app/(app)/users/actions");
+    const res = await createUserAction(undefined, userFormData({ rotationOrder: "0" }));
+
+    expect(res.error).toBeUndefined();
+    const created = await db.prisma.user.findUniqueOrThrow({ where: { email: "new@example.com" } });
+    expect(created.rotationOrder).toBe(0);
+    expect((await db.prisma.user.findUniqueOrThrow({ where: { id: admin.id } })).rotationOrder).toBe(1);
+    expect((await db.prisma.user.findUniqueOrThrow({ where: { id: second.id } })).rotationOrder).toBe(2);
+  });
+
   it("rejects creating a user with a too-short password", async () => {
     const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
     currentSession = sessionFor(admin.id, "Admin");
@@ -68,6 +85,17 @@ describe("users actions", () => {
     const res = await createUserAction(undefined, userFormData({ password: "short" }));
 
     expect(res.error).toMatch(/Passwort/);
+  });
+
+  it("rejects creating a user with a negative rotation order", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { createUserAction } = await import("@/app/(app)/users/actions");
+    const res = await createUserAction(undefined, userFormData({ rotationOrder: "-1" }));
+
+    expect(res.error).toBeTruthy();
+    await expect(db.prisma.user.findUnique({ where: { email: "new@example.com" } })).resolves.toBeNull();
   });
 
   it("rejects creating a user with invalid input", async () => {
