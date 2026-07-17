@@ -55,6 +55,22 @@ describe("GET /api/ical/[token]", () => {
     expect(body).not.toContain("SUMMARY:G");
   });
 
+  it("omits F entries when the user has disabled Ferien in the feed", async () => {
+    const user = await db.prisma.user.create({
+      data: createTestUser({ icalToken: "s-only-token", name: "Bob", icalIncludeVacation: false }),
+    });
+    await db.prisma.entry.create({ data: { userId: user.id, date: "2026-05-04", type: "F" } });
+    await db.prisma.entry.create({ data: { userId: user.id, date: "2026-05-05", type: "S" } });
+
+    const { GET } = await import("@/app/api/ical/[token]/route");
+    const res = await GET(request(), { params: Promise.resolve({ token: "s-only-token" }) });
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("SUMMARY:S");
+    expect(body).not.toContain("SUMMARY:F");
+  });
+
   it("rate-limits repeated failed lookups from the same IP", async () => {
     const { GET } = await import("@/app/api/ical/[token]/route");
     const ip = "203.0.113.2";

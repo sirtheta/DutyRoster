@@ -17,7 +17,10 @@ export default async function DashboardPage({
   const [users, entries, currentUser] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { rotationOrder: "asc" } }),
     prisma.entry.findMany({ where: { date: { startsWith: `${year}-` } } }),
-    prisma.user.findUnique({ where: { id: Number(session.user.id) }, select: { icalToken: true } }),
+    prisma.user.findUnique({
+      where: { id: Number(session.user.id) },
+      select: { icalToken: true, icalIncludeVacation: true },
+    }),
   ]);
 
   const data = users.map((u) => {
@@ -43,7 +46,7 @@ export default async function DashboardPage({
     <div className="flex flex-col gap-4">
       <h1 className="text-xl">Dashboard {year}</h1>
       <DashboardChart data={data} year={year} />
-      <IcalSubscribeCard url={icalUrl} />
+      <IcalSubscribeCard url={icalUrl} includeVacation={currentUser?.icalIncludeVacation ?? true} />
     </div>
   );
 }

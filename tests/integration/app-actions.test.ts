@@ -58,6 +58,20 @@ describe("app actions", () => {
     expect(JSON.parse(audit.details!)).toMatchObject({ action: "regenerateIcalToken" });
   });
 
+  it("updateIcalIncludeVacationAction toggles the caller's own iCal feed scope and logs an audit entry", async () => {
+    const user = await db.prisma.user.create({ data: createTestUser({ icalIncludeVacation: true }) });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { updateIcalIncludeVacationAction } = await import("@/app/(app)/actions");
+    const res = await updateIcalIncludeVacationAction(false);
+
+    expect(res.error).toBeUndefined();
+    const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(updated.icalIncludeVacation).toBe(false);
+    const audit = await db.prisma.auditLog.findFirstOrThrow({ where: { entityType: "User" } });
+    expect(JSON.parse(audit.details!)).toMatchObject({ action: "updateIcalIncludeVacation", includeVacation: false });
+  });
+
   it("changeOwnPasswordAction rejects non-string form fields", async () => {
     const user = await db.prisma.user.create({ data: createTestUser() });
     currentSession = sessionFor(user.id, "Editor");

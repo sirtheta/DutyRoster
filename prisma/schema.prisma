@@ -20,18 +20,18 @@ enum NotifyChannel {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  name         String
-  passwordHash String
-  role         UserRole @default(Viewer)
-  isActive     Boolean  @default(true)
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  name          String
+  passwordHash  String
+  role          UserRole @default(Viewer)
+  isActive      Boolean  @default(true)
   // Set when a user leaves the company (YYYY-MM-DD, same form as Entry.date).
   // Entries after this date are removed on termination; entries up to and
   // including it are kept for history/audit purposes.
-  exitDate     String?
+  exitDate      String?
   // Order in the yearly rotation automation (lower = earlier)
-  rotationOrder Int     @default(0)
+  rotationOrder Int      @default(0)
 
   // Notification settings
   notifyEnabled  Boolean       @default(false)
@@ -43,7 +43,10 @@ model User {
   // Bearer token for the personal iCal feed. Created as 32 random bytes
   // (base64url) in the app; the cuid() default is only a fallback for rows
   // created outside it. Rotatable via the dashboard ("Link neu generieren").
-  icalToken String @unique @default(cuid())
+  icalToken           String  @unique @default(cuid())
+  // Whether the personal iCal feed includes Ferien (F) entries in addition
+  // to S-Dienst. Defaults to true to preserve the feed's prior behavior.
+  icalIncludeVacation Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -96,7 +99,7 @@ model Entry {
 // ── Holidays ────────────────────────────────────────────────────────────────────
 
 model Holiday {
-  id     Int    @id @default(autoincrement())
+  id     Int     @id @default(autoincrement())
   date   String // YYYY-MM-DD
   name   String
   canton String?

@@ -42,6 +42,23 @@ export async function regenerateIcalTokenAction(): Promise<{ error?: string }> {
   return {};
 }
 
+/**
+ * Toggles whether the caller's own iCal feed includes Ferien (F) entries in
+ * addition to S-Dienst. Lives next to regenerateIcalTokenAction since both
+ * are self-service iCal feed settings on the dashboard.
+ */
+export async function updateIcalIncludeVacationAction(includeVacation: boolean): Promise<{ error?: string }> {
+  const session = await requireSession();
+  const userId = parseInt(session.user.id, 10);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { icalIncludeVacation: includeVacation },
+  });
+  await logAudit(session, "UPDATE", "User", userId, { action: "updateIcalIncludeVacation", includeVacation });
+  revalidatePath("/dashboard");
+  return {};
+}
+
 export async function changeOwnPasswordAction(
   _prevState: { error?: string; success?: boolean } | undefined,
   formData: FormData
