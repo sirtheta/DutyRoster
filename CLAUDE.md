@@ -77,6 +77,8 @@ npx vitest run tests/unit/rotation.test.ts
 
 **Audit logging** (`lib/audit.ts`): `logAudit(session, action, entityType, entityId, details)` writes to `AuditLog`; failures are logged but never thrown, so a broken audit trail never blocks the underlying mutation.
 
+**Backups** (`lib/backup.ts`): A nightly cron job (`BACKUP_CRON_SCHEDULE`, default 02:30 server time) writes a consistent SQLite snapshot via `VACUUM INTO` to `backups/` next to the database file (one file per day, `BACKUP_MAX_KEEP_DAYS` retention, default 14; `DISABLE_BACKUP=true` turns it off). In Docker that directory lives inside the data volume, so external syncs of `./data` include the backups.
+
 **Production startup** (`scripts/startup.js`): In the Docker image, this script applies pending Prisma migrations directly via `better-sqlite3` (no Prisma CLI in the image), seeds the first Admin user from env vars, and ensures a `SystemSettings` row exists before the Next.js server starts.
 
 ### Key Environment Variables
@@ -94,7 +96,8 @@ npx vitest run tests/unit/rotation.test.ts
 | `NOTIFY_TIMEZONE` | No | IANA timezone for users' notification weekday/hour, defaults to `Europe/Zurich` |
 | `NOTIFY_MAX_ATTEMPTS` | No | Delivery attempts per notification before giving up, defaults to `3` |
 | `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS` | No | Days to keep notification / audit rows (`0` = forever), default `90` / `365` |
-| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` | No | Dev/staging switches to suppress outgoing notifications |
+| `BACKUP_CRON_SCHEDULE` / `BACKUP_MAX_KEEP_DAYS` | No | Nightly DB backup schedule (default `30 2 * * *`) and retention in days (default `14`, `0` = keep all) |
+| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` / `DISABLE_BACKUP` | No | Dev/staging switches to suppress outgoing notifications / backups |
 
 See `.env.example` for the full list, including session/rate-limit/logging overrides.
 
