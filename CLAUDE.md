@@ -57,7 +57,7 @@ npx vitest run tests/unit/rotation.test.ts
 - NextAuth v5 Credentials provider with bcrypt password validation
 - Constant-time login response (`dummyCompare`) so a bad email doesn't reveal user existence via timing
 - In-memory rate limiting on login attempts (`lib/rate-limit.ts`)
-- JWT sessions, 8-hour max age (configurable via `lib/config.ts`)
+- JWT sessions, 7-day max age (configurable via `lib/config.ts`)
 - `user.role` (`Admin | Editor | Viewer`) is embedded in the JWT and carried into `session.user.role`
 
 **Authorization** (`lib/permissions.ts`):

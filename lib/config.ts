@@ -1,7 +1,7 @@
 export const config = {
   session: {
-    maxAgeSec: parseInt(process.env.SESSION_MAX_AGE_SEC ?? "") || 8 * 60 * 60,
-    updateAgeSec: parseInt(process.env.SESSION_UPDATE_AGE_SEC ?? "") || 60 * 60,
+    maxAgeSec: parseInt(process.env.SESSION_MAX_AGE_SEC ?? "") || 7 * 24 * 60 * 60,
+    updateAgeSec: parseInt(process.env.SESSION_UPDATE_AGE_SEC ?? "") || 24 * 60 * 60,
   },
   rateLimit: {
     maxAttempts: parseInt(process.env.RATE_LIMIT_MAX_ATTEMPTS ?? "") || 5,

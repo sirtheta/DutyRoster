@@ -41,6 +41,14 @@ export default async function RootLayout({
             __html: `try{var c=localStorage.getItem('theme');if(c==='dark')document.documentElement.classList.add('dark');}catch(e){}`,
           }}
         />
+        {/* Anti-flash: restore color scheme before React hydrates */}
+        <script
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{
+            __html: `try{var c=localStorage.getItem('color-scheme');if(c)document.documentElement.setAttribute('data-color',c);}catch(e){}`,
+          }}
+        />
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
