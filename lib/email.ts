@@ -20,6 +20,20 @@ function buildTransport(settings: SystemSettings) {
   });
 }
 
+/**
+ * Renders a plain-text body as HTML with a `format-detection` meta tag, so
+ * mail clients (notably iOS/Apple Mail) don't turn recognized dates, phone
+ * numbers, or addresses into auto-generated links.
+ */
+function toHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+  return `<!DOCTYPE html><html><head><meta name="format-detection" content="date=no, telephone=no, address=no, email=no"></head><body style="font-family: sans-serif; white-space: pre-wrap;">${escaped}</body></html>`;
+}
+
 export async function sendPlanEmail(
   settings: SystemSettings,
   to: string,
@@ -37,5 +51,6 @@ export async function sendPlanEmail(
     to,
     subject,
     text,
+    html: toHtml(text),
   });
 }
