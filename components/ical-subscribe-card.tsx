@@ -1,14 +1,17 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { regenerateIcalTokenAction } from "@/app/(app)/actions";
+import { regenerateIcalTokenAction, updateIcalIncludeVacationAction } from "@/app/(app)/actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
-export function IcalSubscribeCard({ url }: { url: string }) {
+export function IcalSubscribeCard({ url, includeVacation }: { url: string; includeVacation: boolean }) {
   const [isPending, startTransition] = useTransition();
+  const [isTogglePending, startToggle] = useTransition();
+  const [checked, setChecked] = useState(includeVacation);
 
   return (
     <Card className="max-w-xl">
@@ -31,6 +34,27 @@ export function IcalSubscribeCard({ url }: { url: string }) {
           >
             Kopieren
           </Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            id="icalIncludeVacation"
+            type="checkbox"
+            checked={checked}
+            disabled={isTogglePending}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setChecked(next);
+              startToggle(async () => {
+                await updateIcalIncludeVacationAction(next);
+                toast.success("Einstellung gespeichert.");
+              });
+            }}
+            className="h-4 w-4"
+          />
+          <Label htmlFor="icalIncludeVacation" className="font-normal">
+            Ferien im Feed anzeigen
+          </Label>
+          <span className="text-xs text-muted-foreground">(sonst nur S-Dienste)</span>
         </div>
         <div className="flex items-center gap-2">
           <Button

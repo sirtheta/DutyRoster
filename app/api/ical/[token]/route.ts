@@ -24,7 +24,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const entries = await prisma.entry.findMany({
-    where: { userId: user.id, type: { in: ["F", "S"] } },
+    where: {
+      userId: user.id,
+      type: { in: user.icalIncludeVacation ? ["F", "S"] : ["S"] },
+    },
     orderBy: { date: "asc" },
   });
 
