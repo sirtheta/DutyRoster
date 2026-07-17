@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
+import { formatDateCH } from "@/lib/date";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { UserFormDialog } from "@/components/user-form-dialog";
@@ -18,6 +19,7 @@ export default async function UsersPage() {
       name: true,
       role: true,
       isActive: true,
+      exitDate: true,
       rotationOrder: true,
       notifyEnabled: true,
       notifyChannel: true,
@@ -58,6 +60,11 @@ export default async function UsersPage() {
                 <Badge variant={u.isActive ? "default" : "outline"}>
                   {u.isActive ? "Aktiv" : "Inaktiv"}
                 </Badge>
+                {u.exitDate && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Austritt: {formatDateCH(u.exitDate)}
+                  </div>
+                )}
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {u.notifyEnabled ? `${u.notifyChannel} · Wochentag ${u.notifyWeekday}, ${u.notifyHour}:00` : "—"}

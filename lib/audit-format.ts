@@ -10,6 +10,7 @@ const ACTION_LABELS: Record<string, string> = {
   MOVE: "Verschoben",
   AUTOMATIC: "Automatisch generiert",
   SETTINGS: "Einstellungen geändert",
+  TERMINATE: "Austritt erfasst",
 };
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -81,6 +82,11 @@ export function describeAuditLog(log: AuditLog, userNames: Map<number, string>):
 
   if (log.entityType === "Entry" && log.action === "AUTOMATIC") {
     return `Jahr ${details.year}: ${details.count} Dienste generiert`;
+  }
+
+  if (log.entityType === "User" && log.action === "TERMINATE") {
+    const deleted = details.deletedEntries as number | undefined;
+    return `Austrittsdatum ${formatDateCH(details.exitDate as string)}${deleted ? `, ${deleted} zukünftige Einträge entfernt` : ""}`;
   }
 
   if (log.entityType === "User") {

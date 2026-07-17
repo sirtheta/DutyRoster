@@ -163,4 +163,97 @@ describe("users actions", () => {
     const audit = await db.prisma.auditLog.findFirstOrThrow({ where: { entityType: "User", action: "UPDATE" } });
     expect(JSON.parse(audit.details!)).toMatchObject({ isActive: false });
   });
+
+  it("reactivating a user clears a previously set exit date", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    const target = await db.prisma.user.create({
+      data: createTestUser({ email: "target@example.com", isActive: false, exitDate: "2026-06-15" }),
+    });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { toggleActiveAction } = await import("@/app/(app)/users/actions");
+    await toggleActiveAction(target.id, true);
+
+    const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(updated.isActive).toBe(true);
+    expect(updated.exitDate).toBeNull();
+  });
+
+  function terminateFormData(id: number, exitDate: string, regenerate = false): FormData {
+    const fd = new FormData();
+    fd.set("id", String(id));
+    fd.set("exitDate", exitDate);
+    if (regenerate) fd.set("regenerateRotation", "on");
+    return fd;
+  }
+
+  it("rejects a non-admin from terminating a user", async () => {
+    const editor = await db.prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    currentSession = sessionFor(editor.id, "Editor");
+
+    const { terminateUserAction } = await import("@/app/(app)/users/actions");
+    await expect(terminateUserAction(undefined, terminateFormData(editor.id, "2026-06-15"))).rejects.toThrow(
+      "REDIRECT:/calendar"
+    );
+  });
+
+  it("rejects an invalid exit date", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    const target = await db.prisma.user.create({ data: createTestUser({ email: "target@example.com" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { terminateUserAction } = await import("@/app/(app)/users/actions");
+    const res = await terminateUserAction(undefined, terminateFormData(target.id, "not-a-date"));
+
+    expect(res.error).toMatch(/Austrittsdatum/);
+  });
+
+  it("removes only entries after the exit date, deactivates the user, and logs an audit entry", async () => {
+    const { prisma } = db;
+    const admin = await prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    const target = await prisma.user.create({ data: createTestUser({ email: "target@example.com" }) });
+    await prisma.entry.create({ data: { userId: target.id, date: "2026-01-05", type: "S" } });
+    await prisma.entry.create({ data: { userId: target.id, date: "2026-06-15", type: "F" } });
+    await prisma.entry.create({ data: { userId: target.id, date: "2026-09-10", type: "S" } });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { terminateUserAction } = await import("@/app/(app)/users/actions");
+    const res = await terminateUserAction(undefined, terminateFormData(target.id, "2026-06-15"));
+
+    expect(res.error).toBeUndefined();
+    const remaining = await prisma.entry.findMany({ where: { userId: target.id }, orderBy: { date: "asc" } });
+    expect(remaining.map((e) => e.date)).toEqual(["2026-01-05", "2026-06-15"]);
+
+    const updated = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(updated.isActive).toBe(false);
+    expect(updated.exitDate).toBe("2026-06-15");
+
+    const audit = await prisma.auditLog.findFirstOrThrow({ where: { entityType: "User", action: "TERMINATE" } });
+    expect(JSON.parse(audit.details!)).toMatchObject({ exitDate: "2026-06-15", deletedEntries: 1 });
+
+    // Rotation regeneration is opt-in — no automation entries without it.
+    expect(await prisma.entry.count({ where: { source: "Automatic" } })).toBe(0);
+  });
+
+  it("regenerates the rotation for the affected year only when requested", async () => {
+    const { prisma } = db;
+    const admin = await prisma.user.create({ data: createTestUser({ role: "Admin", rotationOrder: 1 }) });
+    const target = await prisma.user.create({
+      data: createTestUser({ email: "target@example.com", rotationOrder: 0 }),
+    });
+    let futureDate = "2026-09-14"; // a Monday
+    await prisma.entry.create({ data: { userId: target.id, date: futureDate, type: "S", source: "Automatic" } });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { terminateUserAction } = await import("@/app/(app)/users/actions");
+    await terminateUserAction(undefined, terminateFormData(target.id, "2026-06-15", true));
+
+    // target is now inactive; admin is the only remaining rotation
+    // participant and should have picked up the vacated week.
+    const adminEntry = await prisma.entry.findUnique({
+      where: { userId_date: { userId: admin.id, date: futureDate } },
+    });
+    expect(adminEntry?.type).toBe("S");
+    expect(adminEntry?.source).toBe("Automatic");
+  });
 });

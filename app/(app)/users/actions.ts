@@ -9,6 +9,9 @@ import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { bcryptRounds } from "@/lib/password";
 import { UserRole, NotifyChannel } from "@prisma/client";
+import { parseDate, toDateString } from "@/lib/date";
+import { notifyCalendarChange } from "@/lib/calendar-events";
+import { generateAutomationAction } from "@/app/(app)/calendar/[year]/actions";
 
 const userSchema = z.object({
   email: z.string().email(),
@@ -97,7 +100,65 @@ export async function updateUserAction(
 
 export async function toggleActiveAction(id: number, isActive: boolean): Promise<void> {
   const session = await requireAdmin();
-  await prisma.user.update({ where: { id }, data: { isActive } });
+  // Reactivating clears a previous exit date — the user is employed again.
+  await prisma.user.update({ where: { id }, data: { isActive, exitDate: isActive ? null : undefined } });
   await logAudit(session, "UPDATE", "User", id, { isActive });
   revalidatePath("/users");
+}
+
+const exitDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Ungültiges Austrittsdatum.")
+  .refine(
+    (s) => {
+      const d = parseDate(s);
+      return !!d && toDateString(d) === s;
+    },
+    { message: "Ungültiges Austrittsdatum." }
+  );
+
+export async function terminateUserAction(
+  _prevState: { error?: string } | undefined,
+  formData: FormData
+): Promise<{ error?: string }> {
+  const session = await requireAdmin();
+  const id = Number(formData.get("id"));
+  const parsedDate = exitDateSchema.safeParse(formData.get("exitDate"));
+  if (!parsedDate.success) return { error: parsedDate.error.issues[0]?.message ?? "Ungültige Eingabe." };
+  const exitDate = parsedDate.data;
+  const regenerate = formData.get("regenerateRotation") === "on";
+
+  // Entries up to and including the exit date are the user's real duty
+  // history and must survive; only future entries are cleared.
+  const futureEntries = await prisma.entry.findMany({
+    where: { userId: id, date: { gt: exitDate } },
+    select: { date: true },
+  });
+  const years = [...new Set(futureEntries.map((e) => e.date.slice(0, 4)))];
+
+  await prisma.$transaction([
+    prisma.entry.deleteMany({ where: { userId: id, date: { gt: exitDate } } }),
+    prisma.user.update({ where: { id }, data: { isActive: false, exitDate } }),
+  ]);
+
+  await logAudit(session, "TERMINATE", "User", id, {
+    exitDate,
+    deletedEntries: futureEntries.length,
+  });
+
+  revalidatePath("/users");
+  for (const year of years) {
+    revalidatePath(`/calendar/${year}`);
+    notifyCalendarChange(year);
+  }
+
+  // Re-running the rotation is optional: the admin may prefer to reassign
+  // the vacated S-Dienst weeks by hand instead.
+  if (regenerate) {
+    for (const year of years) {
+      await generateAutomationAction(Number(year));
+    }
+  }
+
+  return {};
 }
