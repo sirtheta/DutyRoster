@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { EntryType, UserRole } from "@prisma/client";
@@ -50,6 +50,11 @@ const LONG_PRESS_MOVE_TOLERANCE = 10;
 
 type DragPointerState = {
   pointerId: number;
+  // "move" relocates an existing entry (grabbed from an occupied cell);
+  // "select" rubber-bands a rectangular range of cells to bulk-apply a type
+  // to. Only "move" is available on touch/pen — "select" is mouse-only so it
+  // never fights with scrolling on mobile.
+  mode: "move" | "select";
   userId: number;
   date: string;
   startX: number;
@@ -87,6 +92,11 @@ export function CalendarGrid({
   // selection follows the cells to their new spot so the user can keep
   // nudging the same group without re-selecting it.
   const [dragFromSelection, setDragFromSelection] = useState(false);
+  // Endpoints of an in-progress rubber-band drag-select (mouse only). While
+  // set, the rectangle between them drives the live selection preview;
+  // committed to `selection` on pointer up.
+  const [selectAnchor, setSelectAnchor] = useState<Cell | null>(null);
+  const [selectHover, setSelectHover] = useState<Cell | null>(null);
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [activeTool, setActiveTool] = useState<PaintTool | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -115,6 +125,14 @@ export function CalendarGrid({
     dates.forEach((d, i) => map.set(d, i));
     return map;
   }, [dates]);
+  // A subtle, distinct pastel tint per user row so the eye can follow a row
+  // across a wide, horizontally-scrolled year without losing track of which
+  // user it belongs to. Golden-angle hue spacing keeps neighboring rows
+  // visually distinct regardless of how many users there are.
+  const rowTints = useMemo(
+    () => users.map((_, i) => `oklch(0.7 0.09 ${(i * 137.508) % 360})`),
+    [users]
+  );
   const months = useMemo(() => {
     const groups: { month: number; dates: string[] }[] = [];
     for (const d of dates) {
@@ -276,6 +294,63 @@ export function CalendarGrid({
     setDragFromSelection(false);
   }
 
+  // All editable cells in the rectangle spanned by two corner cells —
+  // the core of drag-to-select. Non-editable cells inside the rectangle
+  // (e.g. another user's Ferien when the current user is an Editor) are
+  // silently excluded rather than blocking the whole selection.
+  function rectKeysBetween(a: Cell, b: Cell): Set<string> {
+    const keys = new Set<string>();
+    const ai = userIndexById.get(a.userId);
+    const bi = userIndexById.get(b.userId);
+    const adi = dateIndexByDate.get(a.date);
+    const bdi = dateIndexByDate.get(b.date);
+    if (ai == null || bi == null || adi == null || bdi == null) return keys;
+    const [uLo, uHi] = ai <= bi ? [ai, bi] : [bi, ai];
+    const [dLo, dHi] = adi <= bdi ? [adi, bdi] : [bdi, adi];
+    for (let ui = uLo; ui <= uHi; ui++) {
+      const user = users[ui];
+      for (let di = dLo; di <= dHi; di++) {
+        const date = dates[di];
+        const entry = entryMap.get(`${user.id}-${date}`);
+        if (!canEdit(user.id, entry?.type)) continue;
+        keys.add(cellKey(user.id, date));
+      }
+    }
+    return keys;
+  }
+
+  function handleSelectDragStart(userId: number, date: string) {
+    setSelectAnchor({ userId, date });
+    setSelectHover({ userId, date });
+  }
+
+  function handleSelectOverCell(userId: number, date: string) {
+    setSelectHover((prev) => (prev && prev.userId === userId && prev.date === date ? prev : { userId, date }));
+  }
+
+  // Commits the rectangle between the drag's start cell and its final
+  // position directly (rather than trusting `selectHover` state, which may
+  // not have flushed yet at pointer-up time).
+  function commitSelectDrag(anchor: Cell, target: Cell) {
+    const keys = rectKeysBetween(anchor, target);
+    if (keys.size > 0) setSelection(keys);
+    setSelectAnchor(null);
+    setSelectHover(null);
+  }
+
+  function handleSelectDragCancel() {
+    setSelectAnchor(null);
+    setSelectHover(null);
+  }
+
+  // Live rectangle preview shown while a select-drag is in progress; replaces
+  // (rather than merges into) any prior selection once the drag finishes.
+  const selectPreview = useMemo(() => {
+    if (!selectAnchor || !selectHover) return null;
+    return rectKeysBetween(selectAnchor, selectHover);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectAnchor, selectHover, userIndexById, dateIndexByDate, users, dates, entryMap]);
+
   // Live preview of where the dragged cells would land, computed from the
   // offset between the grabbed cell and the cell currently hovered over.
   const dragPreview = useMemo(() => {
@@ -382,13 +457,20 @@ export function CalendarGrid({
     e: ReactPointerEvent<HTMLTableCellElement>,
     userId: number,
     date: string,
-    draggable: boolean
+    draggable: boolean,
+    editable: boolean
   ) {
-    if (!draggable) return;
+    // Occupied cells always start a "move" drag (any pointer type, as
+    // before). Empty/editable cells start a "select" drag, but only for the
+    // mouse — on touch/pen those cells stay scrollable, same as today.
+    const isMouseSelect = !draggable && editable && e.pointerType === "mouse";
+    if (!draggable && !isMouseSelect) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
+    const mode: DragPointerState["mode"] = draggable ? "move" : "select";
     const state: DragPointerState = {
       pointerId: e.pointerId,
+      mode,
       userId,
       date,
       startX: e.clientX,
@@ -419,7 +501,8 @@ export function CalendarGrid({
         if (dist > DRAG_MOVE_THRESHOLD) {
           state.started = true;
           suppressClickRef.current = true;
-          handleDragStart(state.userId, state.date);
+          if (state.mode === "move") handleDragStart(state.userId, state.date);
+          else handleSelectDragStart(state.userId, state.date);
         }
       } else if (dist > LONG_PRESS_MOVE_TOLERANCE && state.longPressTimer) {
         // Moved too far before the long-press fired — let it scroll instead.
@@ -432,7 +515,10 @@ export function CalendarGrid({
     if (state.started) {
       e.preventDefault();
       const target = cellFromPoint(e.clientX, e.clientY);
-      if (target) handleDragOverCell(target.userId, target.date);
+      if (target) {
+        if (state.mode === "move") handleDragOverCell(target.userId, target.date);
+        else handleSelectOverCell(target.userId, target.date);
+      }
     }
   }
 
@@ -443,8 +529,12 @@ export function CalendarGrid({
     dragPointerRef.current = null;
     if (state.started) {
       const target = cellFromPoint(e.clientX, e.clientY);
-      if (target) handleDrop(target.userId, target.date);
-      else handleDragEnd();
+      if (state.mode === "move") {
+        if (target) handleDrop(target.userId, target.date);
+        else handleDragEnd();
+      } else {
+        commitSelectDrag({ userId: state.userId, date: state.date }, target ?? { userId: state.userId, date: state.date });
+      }
     }
   }
 
@@ -453,12 +543,15 @@ export function CalendarGrid({
     if (!state || state.pointerId !== e.pointerId) return;
     if (state.longPressTimer) clearTimeout(state.longPressTimer);
     dragPointerRef.current = null;
-    if (state.started) handleDragEnd();
+    if (state.started) {
+      if (state.mode === "move") handleDragEnd();
+      else handleSelectDragCancel();
+    }
   }
 
   const hasWeekendSelected = useMemo(
-    () => [...selection].some((k) => isWeekend(parseCellKey(k).date)),
-    [selection]
+    () => [...(selectPreview ?? selection)].some((k) => isWeekend(parseCellKey(k).date)),
+    [selection, selectPreview]
   );
 
   function renderDateHeaderCell(d: string, keyPrefix: string) {
@@ -478,7 +571,7 @@ export function CalendarGrid({
     );
   }
 
-  function renderDataCell(u: UserRow, d: string) {
+  function renderDataCell(u: UserRow, d: string, rowTint: string) {
     const entry = entryMap.get(`${u.id}-${d}`);
     const info = entry ? TYPE_INFO[entry.type] : undefined;
     const isHoliday = !!holidayNameByDate[d];
@@ -486,16 +579,24 @@ export function CalendarGrid({
     const editable = canEdit(u.id, entry?.type);
     const draggable = editable && !!entry;
     const key = cellKey(u.id, d);
-    const selected = selection.has(key);
+    // While a rubber-band drag is in progress, its live rectangle takes over
+    // the highlight entirely (it replaces the committed selection on drop).
+    const selected = selectPreview ? selectPreview.has(key) : selection.has(key);
     const isDragSource = dragCells?.some((c) => c.userId === u.id && c.date === d) ?? false;
     const previewValid = dragPreview?.valid.has(key) ?? false;
     const previewConflict = dragPreview?.conflict.has(key) ?? false;
+    // Blend a thin sliver of the row's tint into every cell's own color
+    // (entry-type color, or muted/background for empty cells) so a row stays
+    // traceable across a wide scroll without drowning out the type colors.
+    const baseBg = isHoliday || weekend ? "var(--muted)" : "var(--background)";
+    const cellStyle: CSSProperties = info
+      ? { backgroundColor: `color-mix(in oklch, ${info.color} 85%, ${rowTint} 15%)`, color: info.textColor ?? "#fff" }
+      : { backgroundColor: `color-mix(in oklch, ${baseBg} 88%, ${rowTint} 12%)` };
     return (
       <td
         key={d}
         className={cn(
           "h-7 min-w-[1.75rem] border-b border-l p-0 text-center align-middle",
-          (isHoliday || weekend) && !entry && "bg-muted",
           editable && "cursor-pointer hover:opacity-80",
           // Touch browsers decide whether a touch will pan/scroll the page
           // right at touchstart, based on this CSS — not on anything our JS
@@ -512,11 +613,11 @@ export function CalendarGrid({
           previewValid && "shadow-[inset_0_0_0_2px_#2563eb]",
           previewConflict && "shadow-[inset_0_0_0_2px_#dc2626]"
         )}
-        style={info ? { backgroundColor: info.color, color: info.textColor ?? "#fff" } : undefined}
+        style={cellStyle}
         title={entry?.comment ?? holidayNameByDate[d] ?? (weekend ? "Wochenende" : undefined)}
         data-user-id={u.id}
         data-date={d}
-        onPointerDown={(e) => handleCellPointerDown(e, u.id, d, draggable)}
+        onPointerDown={(e) => handleCellPointerDown(e, u.id, d, draggable, editable)}
         onPointerMove={handleCellPointerMove}
         onPointerUp={handleCellPointerUp}
         onPointerCancel={handleCellPointerCancel}
@@ -538,8 +639,8 @@ export function CalendarGrid({
         className="sticky top-0 z-20 flex flex-col gap-2 rounded-md border bg-background p-2 shadow-sm"
       >
         <span className="text-sm tabular-nums text-muted-foreground">
-          {selection.size > 0
-            ? `${selection.size} Zelle(n) ausgewählt`
+          {(selectPreview ?? selection).size > 0
+            ? `${(selectPreview ?? selection).size} Zelle(n) ausgewählt`
             : activeTool === "DELETE"
               ? "Zellen anklicken zum Löschen"
               : activeTool !== null
@@ -637,12 +738,15 @@ export function CalendarGrid({
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
+            {users.map((u, i) => (
               <tr key={u.id}>
-                <td className="sticky left-0 z-10 border-b bg-background p-2 font-medium whitespace-nowrap">
+                <td
+                  className="sticky left-0 z-10 border-b p-2 font-medium whitespace-nowrap"
+                  style={{ backgroundColor: `color-mix(in oklch, var(--background) 78%, ${rowTints[i]} 22%)` }}
+                >
                   {u.name}
                 </td>
-                {dates.map((d) => renderDataCell(u, d))}
+                {dates.map((d) => renderDataCell(u, d, rowTints[i]))}
               </tr>
             ))}
           </tbody>
@@ -667,12 +771,15 @@ export function CalendarGrid({
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u) => (
+                  {users.map((u, i) => (
                     <tr key={u.id}>
-                      <td className="sticky left-0 z-10 border-b bg-background p-2 font-medium whitespace-nowrap">
+                      <td
+                        className="sticky left-0 z-10 border-b p-2 font-medium whitespace-nowrap"
+                        style={{ backgroundColor: `color-mix(in oklch, var(--background) 78%, ${rowTints[i]} 22%)` }}
+                      >
                         {u.name}
                       </td>
-                      {m.dates.map((d) => renderDataCell(u, d))}
+                      {m.dates.map((d) => renderDataCell(u, d, rowTints[i]))}
                     </tr>
                   ))}
                 </tbody>
