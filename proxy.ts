@@ -39,12 +39,16 @@ export async function proxy(request: NextRequest) {
 
   if (!isPublicRoute) {
     const isLoggedIn = !!request.cookies.get(SESSION_COOKIE)?.value;
-    const isLoginPage = pathname.startsWith("/login");
+    // Pages of the auth flow itself — reachable logged-out, pointless logged-in.
+    const isAuthPage =
+      pathname.startsWith("/login") ||
+      pathname.startsWith("/forgot-password") ||
+      pathname.startsWith("/reset-password");
 
-    if (isLoggedIn && isLoginPage) {
+    if (isLoggedIn && isAuthPage) {
       return NextResponse.redirect(new URL("/calendar", request.url));
     }
-    if (!isLoggedIn && !isLoginPage) {
+    if (!isLoggedIn && !isAuthPage) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
   }

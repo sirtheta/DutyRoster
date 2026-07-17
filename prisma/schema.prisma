@@ -51,11 +51,29 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  entries       Entry[]
-  auditLogs     AuditLog[]
-  notifications PendingNotification[]
+  entries             Entry[]
+  auditLogs           AuditLog[]
+  notifications       PendingNotification[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([rotationOrder])
+}
+
+// ── Password reset ─────────────────────────────────────────────────────────────
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  // SHA-256 of the raw token; the raw token only ever exists in the email
+  // link, so a leaked DB row can't be used to reset a password.
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ── Duty/absence types ─────────────────────────────────────────────────────────

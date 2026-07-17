@@ -14,6 +14,7 @@ Ein Dienstplanungstool für das Sanitätsteam eines Unternehmens. Die Anwendung 
 - **iCal-Feed** – persönlicher, token-basierter Kalender-Export (Dienste & Ferien) für Kalender-Apps
 - **Excel-Export** – Jahresplan als Excel-Datei exportierbar
 - **Benutzerverwaltung** – Rollen (Admin, Editor, Viewer), Rotationsreihenfolge, Benachrichtigungskanal pro Person
+- **Passwort zurücksetzen** – Self-Service per E-Mail-Link („Passwort vergessen?“ auf der Anmeldeseite)
 - **Audit-Log** – protokolliert Änderungen an Plänen und Einstellungen
 - **Nächtliche Backups** – tägliche SQLite-Sicherung (`VACUUM INTO`) in den Datenordner, mit konfigurierbarer Aufbewahrungsdauer
 

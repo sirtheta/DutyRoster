@@ -59,6 +59,7 @@ npx vitest run tests/unit/rotation.test.ts
 - In-memory rate limiting on login attempts (`lib/rate-limit.ts`)
 - JWT sessions, 7-day max age (configurable via `lib/config.ts`)
 - `user.role` (`Admin | Editor | Viewer`) is embedded in the JWT and carried into `session.user.role`
+- Self-service password reset (`lib/password-reset.ts`, `app/(auth)/forgot-password` + `reset-password`): emailed single-use link (SHA-256 hash stored, 1h TTL), generic responses to prevent account enumeration, rate-limited per email and IP
 
 **Authorization** (`lib/permissions.ts`):
 - `requireRole(roles)` / `requireAdmin()` / `requireEditor()` / `requireSession()` — call at the top of Server Components or Server Actions that need role gating; redirects to `/login` or `/calendar` on failure

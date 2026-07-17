@@ -1,5 +1,5 @@
-import { headers } from "next/headers";
 import prisma from "@/lib/prisma";
+import { appOrigin } from "@/lib/origin";
 import { requireSession } from "@/lib/permissions";
 import { ENTRY_TYPES } from "@/lib/entry-types";
 import { DashboardChart } from "@/components/dashboard-chart";
@@ -32,15 +32,7 @@ export default async function DashboardPage({
     return row;
   });
 
-  // Prefer the configured canonical origin; the Host header is only a
-  // fallback for setups without AUTH_URL (it is client-controlled input).
-  let origin = process.env.AUTH_URL?.replace(/\/+$/, "");
-  if (!origin) {
-    const host = (await headers()).get("host");
-    const proto = process.env.NODE_ENV === "production" ? "https" : "http";
-    origin = `${proto}://${host}`;
-  }
-  const icalUrl = currentUser ? `${origin}/api/ical/${currentUser.icalToken}` : "";
+  const icalUrl = currentUser ? `${await appOrigin()}/api/ical/${currentUser.icalToken}` : "";
 
   return (
     <div className="flex flex-col gap-4">
