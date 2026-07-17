@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import nodemailer from "nodemailer";
 import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { encryptSecret } from "@/lib/crypto";
+import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { queueDueNotifications, dispatchPendingNotifications } from "@/lib/notifications";
 
 const settingsSchema = z.object({
@@ -50,6 +51,52 @@ export async function updateSettingsAction(
 
   revalidatePath("/settings");
   return { success: true };
+}
+
+/** Verifies SMTP connectivity/auth with the (possibly unsaved) form values, without sending an email. */
+export async function testSmtpConnectionAction(
+  formData: FormData
+): Promise<{ error?: string; success?: boolean }> {
+  await requireAdmin();
+
+  const host = formData.get("smtpHost");
+  const user = formData.get("smtpUser");
+  const portRaw = formData.get("smtpPort");
+  const passwordInput = formData.get("smtpPassword");
+
+  if (typeof host !== "string" || !host || typeof user !== "string" || !user) {
+    return { error: "Host und Benutzer müssen angegeben werden." };
+  }
+
+  let password: string;
+  if (typeof passwordInput === "string" && passwordInput.length > 0) {
+    password = passwordInput;
+  } else {
+    const existing = await prisma.systemSettings.findUnique({
+      where: { id: 1 },
+      select: { smtpPassword: true },
+    });
+    if (!existing?.smtpPassword) {
+      return { error: "Kein Passwort hinterlegt. Bitte Passwort eingeben." };
+    }
+    password = decryptSecret(existing.smtpPassword);
+  }
+
+  const port = typeof portRaw === "string" && portRaw ? Number(portRaw) : 587;
+  if (!Number.isInteger(port)) return { error: "Ungültiger Port." };
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass: password },
+    });
+    await transporter.verify();
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Verbindung fehlgeschlagen." };
+  }
 }
 
 /** Dev-only: runs the real notification pipeline (email + Telegram) on demand, ignoring each user's configured weekday/hour. */
