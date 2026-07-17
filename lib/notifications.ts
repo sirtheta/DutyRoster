@@ -111,7 +111,9 @@ export async function queueDueNotifications(
     const subject = `Sanitätsplaner: Dein S-Dienst diese Woche`;
     const body = `Hallo ${user.name}\n\nDu hast diese Woche ${TYPE_INFO.S.label} an folgenden Tagen: ${dates}.`;
 
-    for (const channel of notifyChannelsFor(user)) {
+    const channels = notifyChannelsFor(user);
+    if (channels.length === 0) continue;
+    for (const channel of channels) {
       await prisma.pendingNotification.create({
         data: { userId: user.id, channel, subject, body },
       });

@@ -49,7 +49,7 @@ export async function runBackup(
   const target = join(backupDir, `DutyRoster-backup-${toDateString(now)}.db`);
   // VACUUM INTO refuses to overwrite an existing file.
   if (existsSync(target)) unlinkSync(target);
-  await prisma.$executeRawUnsafe(`VACUUM INTO '${target.replace(/'/g, "''")}'`);
+  await prisma.$executeRaw`VACUUM INTO ${target}`;
   log.info({ target }, "Database backup written");
 
   pruneOldBackups(backupDir, options.maxKeepDays ?? config.backup.maxKeepDays, now);

@@ -36,19 +36,23 @@ export async function createPasswordResetToken(
 /**
  * Validates a raw token and marks it used. Returns the owning userId, or
  * null when the token is unknown, expired, or already used.
+ *
+ * The check-and-mark happens as a single conditional update (rather than a
+ * findUnique followed by an update) so two concurrent requests for the same
+ * token can't both read usedAt: null before either writes — only the first
+ * one succeeds.
  */
 export async function consumePasswordResetToken(
   prisma: PrismaClient,
   token: string,
   now = new Date()
 ): Promise<number | null> {
-  const row = await prisma.passwordResetToken.findUnique({
-    where: { tokenHash: hashResetToken(token) },
-  });
-  if (!row || row.usedAt || row.expiresAt < now) return null;
-  await prisma.passwordResetToken.update({
-    where: { id: row.id },
+  const tokenHash = hashResetToken(token);
+  const { count } = await prisma.passwordResetToken.updateMany({
+    where: { tokenHash, usedAt: null, expiresAt: { gte: now } },
     data: { usedAt: now },
   });
-  return row.userId;
+  if (count === 0) return null;
+  const row = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+  return row?.userId ?? null;
 }

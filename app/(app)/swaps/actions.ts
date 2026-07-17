@@ -194,10 +194,13 @@ export async function declineSwapRequestAction(requestId: number): Promise<{ err
     return { error: "Keine Berechtigung für diese Anfrage." };
   }
 
-  await prisma.swapRequest.update({
-    where: { id: request.id },
+  // Guard against a race with a concurrent accept: only transitions the row
+  // if it's still Pending, so an in-flight accept can't be overwritten.
+  const { count } = await prisma.swapRequest.updateMany({
+    where: { id: request.id, status: "Pending" },
     data: { status: "Declined", decidedAt: new Date() },
   });
+  if (count === 0) return { error: "Anfrage wurde bereits bearbeitet." };
   await logAudit(session, "UPDATE", "SwapRequest", request.id, { action: "decline" });
   await notifyUser(
     request.fromUserId,
@@ -220,10 +223,13 @@ export async function cancelSwapRequestAction(requestId: number): Promise<{ erro
     return { error: "Keine Berechtigung für diese Anfrage." };
   }
 
-  await prisma.swapRequest.update({
-    where: { id: request.id },
+  // Guard against a race with a concurrent accept: only transitions the row
+  // if it's still Pending, so an in-flight accept can't be overwritten.
+  const { count } = await prisma.swapRequest.updateMany({
+    where: { id: request.id, status: "Pending" },
     data: { status: "Cancelled", decidedAt: new Date() },
   });
+  if (count === 0) return { error: "Anfrage wurde bereits bearbeitet." };
   await logAudit(session, "UPDATE", "SwapRequest", request.id, { action: "cancel" });
 
   revalidatePath("/dashboard");
