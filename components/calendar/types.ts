@@ -14,7 +14,7 @@ export type EntryRow = {
   comment: string | null;
 };
 
-export type UserRow = { id: number; name: string; rotationOrder: number };
+export type UserRow = { id: number; name: string; rotationOrder: number; exitDate: string | null };
 export type Cell = { userId: number; date: string };
 // The category currently selected in the always-visible legend. While set,
 // clicking a cell paints it directly instead of toggling the selection.

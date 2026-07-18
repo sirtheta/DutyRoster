@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireEditor } from "@/lib/permissions";
+import { rosterForYearWhere } from "@/lib/users";
 import { datesOfYear, weekdayAbbr, isWeekend } from "@/lib/date";
 import { TYPE_INFO } from "@/lib/entry-types";
 
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const [users, entries, holidays] = await Promise.all([
-    prisma.user.findMany({ where: { isActive: true }, orderBy: { rotationOrder: "asc" } }),
+    prisma.user.findMany({ where: rosterForYearWhere(year), orderBy: { rotationOrder: "asc" } }),
     prisma.entry.findMany({ where: { date: { startsWith: `${year}-` } } }),
     prisma.holiday.findMany({ where: { year }, select: { date: true } }),
   ]);

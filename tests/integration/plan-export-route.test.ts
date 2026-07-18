@@ -78,4 +78,41 @@ describe("GET /api/plan/[year]/export", () => {
     expect(names.has("Alice")).toBe(true);
     expect(names.has("Inactive")).toBe(false);
   });
+
+  it("keeps a user terminated mid-year on that year's export, but not the next year's", async () => {
+    const admin = await db.prisma.user.create({
+      data: createTestUser({ email: "admin@example.com", role: "Editor", name: "Alice", rotationOrder: 0 }),
+    });
+    await db.prisma.user.create({
+      data: createTestUser({
+        email: "left@example.com",
+        role: "Editor",
+        name: "Left",
+        isActive: false,
+        exitDate: "2026-06-15",
+      }),
+    });
+    currentSession = sessionFor(admin.id, "Editor");
+
+    const { GET } = await import("@/app/api/plan/[year]/export/route");
+
+    const namesForYear = async (year: string) => {
+      const res = await GET(new NextRequest(`http://localhost/api/plan/${year}/export`), {
+        params: Promise.resolve({ year }),
+      });
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const sheet = workbook.getWorksheet(year)!;
+      const names = new Set<string>();
+      sheet.eachRow((row) => {
+        const value = row.getCell(1).value;
+        if (typeof value === "string") names.add(value);
+      });
+      return names;
+    };
+
+    expect((await namesForYear("2026")).has("Left")).toBe(true);
+    expect((await namesForYear("2027")).has("Left")).toBe(false);
+  });
 });

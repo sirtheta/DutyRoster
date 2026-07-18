@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { appOrigin } from "@/lib/origin";
 import { requireSession } from "@/lib/permissions";
+import { rosterForYearWhere } from "@/lib/users";
 import { ENTRY_TYPES } from "@/lib/entry-types";
 import { formatDateCH, parseDate, toDateString } from "@/lib/date";
 import { addDays } from "@/lib/date";
@@ -26,9 +27,13 @@ export default async function DashboardPage({
   const thisWeek = weekRange(now);
   const nextWeek = weekRange(parseDate(addDays(thisWeek.start, 7))!);
 
-  const [users, entries, currentUser, upcomingDuties, pendingSwaps, dutyEntries, yearDuties, holidays] =
+  const [activeUsers, yearUsers, entries, currentUser, upcomingDuties, pendingSwaps, dutyEntries, yearDuties, holidays] =
     await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { rotationOrder: "asc" } }),
+    // Includes users terminated partway through the viewed year, so the
+    // per-employee chart still accounts for their history that year — unlike
+    // activeUsers above, which is for swap colleagues and must stay current.
+    prisma.user.findMany({ where: rosterForYearWhere(year), orderBy: { rotationOrder: "asc" } }),
     prisma.entry.findMany({ where: { date: { startsWith: `${year}-` } } }),
     prisma.user.findUnique({
       where: { id: userId },
@@ -113,11 +118,11 @@ export default async function DashboardPage({
       rows.length > 1 ? `Alle (${rows.map((r) => r.toUser.name).join(", ")})` : rows[0].toUser.name
     )
   );
-  const colleagues = users
+  const colleagues = activeUsers
     .filter((u) => u.id !== userId)
     .map((u) => ({ id: u.id, name: u.name }));
 
-  const data = users.map((u) => {
+  const data = yearUsers.map((u) => {
     const row: Record<string, string | number> = { name: u.name };
     for (const type of ENTRY_TYPES) row[type] = 0;
     for (const e of entries) {
