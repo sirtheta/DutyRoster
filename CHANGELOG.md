@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.4](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.3...DutyRoster-v0.4.4) (2026-07-18)
+
+
+### Features
+
+* add favicon ([601379f](https://github.com/sirtheta/DutyRoster/commit/601379fb4f79127874c0ebae601872ebf53dd852))
+* **swaps:** broadcast swap requests to all colleagues, multiline comments ([dd6cb87](https://github.com/sirtheta/DutyRoster/commit/dd6cb8773b2d3a83d2505c0a18c197f7e2faed93))
+
 ## [0.4.3](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.2...DutyRoster-v0.4.3) (2026-07-17)
 
 
