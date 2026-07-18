@@ -71,6 +71,8 @@ enum SwapRequestStatus {
   Accepted
   Declined
   Cancelled
+  // Auto-closed because a sibling request in the same broadcast group was accepted first.
+  Superseded
 }
 
 model SwapRequest {
@@ -83,6 +85,9 @@ model SwapRequest {
   dates      String
   comment    String?
   status     SwapRequestStatus @default(Pending)
+  // Shared across the N rows created by a "broadcast to everyone" request, so
+  // accepting/cancelling one can close out the rest of the group.
+  groupId    String?
   createdAt  DateTime          @default(now())
   decidedAt  DateTime?
 
@@ -92,6 +97,7 @@ model SwapRequest {
   @@index([status])
   @@index([fromUserId])
   @@index([toUserId])
+  @@index([groupId])
 }
 
 // ── Password reset ─────────────────────────────────────────────────────────────

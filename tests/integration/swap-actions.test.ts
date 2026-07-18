@@ -65,6 +65,71 @@ describe("swap request actions", () => {
     expect(res.error).toMatch(/eigene S-Dienste/);
   });
 
+  it("broadcasts to every active colleague when toUserId is null, and accepting supersedes the rest", async () => {
+    const { prisma } = db;
+    const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com" }) });
+    const colleagueA = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Viewer" }) });
+    const colleagueB = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Viewer" }) });
+    const inactive = await prisma.user.create({
+      data: createTestUser({ email: "inactive@example.com", isActive: false }),
+    });
+    await seedDutyWeek(owner.id);
+    currentSession = sessionFor(owner.id, "Viewer", "Owner");
+
+    const { createSwapRequestAction, acceptSwapRequestAction } = await import("@/app/(app)/swaps/actions");
+    const res = await createSwapRequestAction({ toUserId: null, dates: WEEK, comment: "Zeile 1\nZeile 2" });
+    expect(res.error).toBeUndefined();
+
+    const requests = await prisma.swapRequest.findMany({ orderBy: { toUserId: "asc" } });
+    expect(requests).toHaveLength(2);
+    expect(requests.every((r) => r.status === "Pending")).toBe(true);
+    expect(requests.every((r) => r.groupId !== null)).toBe(true);
+    expect(requests.map((r) => r.toUserId).sort()).toEqual([colleagueA.id, colleagueB.id].sort());
+    expect(requests.every((r) => r.toUserId !== inactive.id)).toBe(true);
+    expect(requests[0].comment).toBe("Zeile 1\nZeile 2");
+
+    const requestForA = requests.find((r) => r.toUserId === colleagueA.id)!;
+    const requestForB = requests.find((r) => r.toUserId === colleagueB.id)!;
+
+    currentSession = sessionFor(colleagueA.id, "Viewer", "A");
+    const acceptRes = await acceptSwapRequestAction(requestForA.id);
+    expect(acceptRes.error).toBeUndefined();
+
+    const updatedA = await prisma.swapRequest.findUniqueOrThrow({ where: { id: requestForA.id } });
+    expect(updatedA.status).toBe("Accepted");
+    const updatedB = await prisma.swapRequest.findUniqueOrThrow({ where: { id: requestForB.id } });
+    expect(updatedB.status).toBe("Superseded");
+
+    const moved = await prisma.entry.findMany({ where: { userId: colleagueA.id, type: "S" } });
+    expect(moved).toHaveLength(WEEK.length);
+
+    // B was notified that the request is no longer available.
+    const supersededNotification = await prisma.pendingNotification.findFirstOrThrow({
+      where: { userId: colleagueB.id, subject: { contains: "bereits vergeben" } },
+    });
+    expect(supersededNotification.body).toContain("bereits von jemand anderem angenommen");
+  });
+
+  it("cancelling one row of a broadcast request withdraws the whole group", async () => {
+    const { prisma } = db;
+    const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com" }) });
+    await prisma.user.create({ data: createTestUser({ email: "a@example.com" }) });
+    await prisma.user.create({ data: createTestUser({ email: "b@example.com" }) });
+    await seedDutyWeek(owner.id);
+    currentSession = sessionFor(owner.id, "Viewer", "Owner");
+
+    const { createSwapRequestAction, cancelSwapRequestAction } = await import("@/app/(app)/swaps/actions");
+    await createSwapRequestAction({ toUserId: null, dates: WEEK });
+    const requests = await prisma.swapRequest.findMany();
+    expect(requests).toHaveLength(2);
+
+    const res = await cancelSwapRequestAction(requests[0].id);
+    expect(res.error).toBeUndefined();
+
+    const updated = await prisma.swapRequest.findMany();
+    expect(updated.every((r) => r.status === "Cancelled")).toBe(true);
+  });
+
   it("rejects past dates, self-swaps, and overlapping open requests", async () => {
     const { prisma } = db;
     const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com" }) });

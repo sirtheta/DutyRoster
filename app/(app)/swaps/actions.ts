@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -22,9 +23,10 @@ const dateSchema = z
   }, "Ungültiges Datum.");
 
 const createSchema = z.object({
-  toUserId: z.number().int().positive(),
+  // null means "broadcast to every active colleague".
+  toUserId: z.number().int().positive().nullable(),
   dates: z.array(dateSchema).min(1).max(10),
-  comment: z.string().max(500, "Kommentar ist zu lang.").optional(),
+  comment: z.string().max(1000, "Kommentar ist zu lang.").optional(),
 });
 
 /**
@@ -49,9 +51,14 @@ function formatDates(dates: string[]): string {
   return dates.map(formatDateCH).join(", ");
 }
 
-/** Requests that a colleague takes over the caller's own S-duties on the given days. */
+/**
+ * Requests that a colleague takes over the caller's own S-duties on the given
+ * days. If `toUserId` is null, broadcasts the offer to every active colleague
+ * at once (one `SwapRequest` row each, tied together by `groupId`) — whoever
+ * accepts first gets the duties, and the rest are marked Superseded.
+ */
 export async function createSwapRequestAction(rawInput: {
-  toUserId: number;
+  toUserId: number | null;
   dates: string[];
   comment?: string;
 }): Promise<{ error?: string }> {
@@ -66,8 +73,6 @@ export async function createSwapRequestAction(rawInput: {
   if (toUserId === fromUserId) {
     return { error: "Du kannst keinen Tausch mit dir selbst anfragen." };
   }
-  const target = await prisma.user.findUnique({ where: { id: toUserId } });
-  if (!target || !target.isActive) return { error: "Benutzer nicht gefunden." };
 
   const today = toDateString(new Date());
   if (dates.some((d) => d < today)) {
@@ -89,18 +94,38 @@ export async function createSwapRequestAction(rawInput: {
     return { error: "Für mindestens einen dieser Tage besteht bereits eine offene Anfrage." };
   }
 
-  const request = await prisma.swapRequest.create({
-    data: { fromUserId, toUserId, dates: JSON.stringify(dates), comment },
-  });
-  await logAudit(session, "CREATE", "SwapRequest", request.id, { toUserId, dates });
+  const targets =
+    toUserId === null
+      ? await prisma.user.findMany({ where: { isActive: true, id: { not: fromUserId } } })
+      : await prisma.user
+          .findUnique({ where: { id: toUserId } })
+          .then((u) => (u && u.isActive ? [u] : []));
+  if (targets.length === 0) return { error: "Benutzer nicht gefunden." };
 
-  await notifyUser(
-    toUserId,
-    "Sanitätsplaner: Anfrage für Diensttausch",
-    `Hallo ${target.name}\n\n${session.user.name} möchte dir S-Dienste übergeben: ${formatDates(dates)}.` +
-      (comment ? `\nKommentar: ${comment}` : "") +
-      `\n\nBitte bestätige oder lehne die Anfrage im Sanitätsplaner (Dashboard) ab.`
+  const groupId = targets.length > 1 ? randomUUID() : null;
+  const requests = await prisma.$transaction(
+    targets.map((target) =>
+      prisma.swapRequest.create({
+        data: { fromUserId, toUserId: target.id, dates: JSON.stringify(dates), comment, groupId },
+      })
+    )
   );
+  await logAudit(session, "CREATE", "SwapRequest", requests[0].id, {
+    toUserIds: targets.map((t) => t.id),
+    groupId,
+    dates,
+  });
+
+  for (const target of targets) {
+    await notifyUser(
+      target.id,
+      "Sanitätsplaner: Anfrage für Diensttausch",
+      `Hallo ${target.name}\n\n${session.user.name} möchte S-Dienste übergeben: ${formatDates(dates)}.` +
+        (groupId ? " Die Anfrage wurde an alle verfügbaren Kolleginnen und Kollegen gestellt — wer zuerst annimmt, übernimmt." : "") +
+        (comment ? `\n\nKommentar:\n${comment}` : "") +
+        `\n\nBitte bestätige oder lehne die Anfrage im Sanitätsplaner (Dashboard) ab.`
+    );
+  }
 
   revalidatePath("/dashboard");
   return {};
@@ -123,6 +148,16 @@ export async function acceptSwapRequestAction(requestId: number): Promise<{ erro
   const dates = JSON.parse(request.dates) as string[];
   try {
     await prisma.$transaction(async (tx) => {
+      // Guard against a race with a concurrent accept/decline/cancel: only
+      // proceeds if the row is still Pending, so two simultaneous accepts
+      // (e.g. two colleagues on a broadcast request) can't both go through.
+      const { count } = await tx.swapRequest.updateMany({
+        where: { id: request.id, status: "Pending" },
+        data: { status: "Accepted", decidedAt: new Date() },
+      });
+      if (count === 0) {
+        throw new Error("Anfrage wurde bereits bearbeitet.");
+      }
       for (const date of dates) {
         const source = await tx.entry.findUnique({
           where: { userId_date: { userId: request.fromUserId, date } },
@@ -147,10 +182,6 @@ export async function acceptSwapRequestAction(requestId: number): Promise<{ erro
           },
         });
       }
-      await tx.swapRequest.update({
-        where: { id: request.id },
-        data: { status: "Accepted", decidedAt: new Date() },
-      });
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -171,6 +202,28 @@ export async function acceptSwapRequestAction(requestId: number): Promise<{ erro
     "Sanitätsplaner: Diensttausch bestätigt",
     `Hallo ${request.fromUser.name}\n\n${request.toUser.name} hat deine Tauschanfrage angenommen und übernimmt: ${formatDates(dates)}.`
   );
+
+  // If this was part of a broadcast (an "an alle" request), close out the
+  // sibling invitations that are still open — someone else already took it.
+  if (request.groupId) {
+    const siblings = await prisma.swapRequest.findMany({
+      where: { groupId: request.groupId, status: "Pending", id: { not: request.id } },
+      include: { toUser: true },
+    });
+    if (siblings.length > 0) {
+      await prisma.swapRequest.updateMany({
+        where: { groupId: request.groupId, status: "Pending", id: { not: request.id } },
+        data: { status: "Superseded", decidedAt: new Date() },
+      });
+      for (const sibling of siblings) {
+        await notifyUser(
+          sibling.toUserId,
+          "Sanitätsplaner: Diensttausch bereits vergeben",
+          `Hallo ${sibling.toUser.name}\n\nDie Tauschanfrage von ${request.fromUser.name} für ${formatDates(dates)} wurde bereits von jemand anderem angenommen.`
+        );
+      }
+    }
+  }
 
   for (const year of new Set(dates.map((d) => d.slice(0, 4)))) {
     revalidatePath(`/calendar/${year}`);
@@ -202,11 +255,16 @@ export async function declineSwapRequestAction(requestId: number): Promise<{ err
   });
   if (count === 0) return { error: "Anfrage wurde bereits bearbeitet." };
   await logAudit(session, "UPDATE", "SwapRequest", request.id, { action: "decline" });
-  await notifyUser(
-    request.fromUserId,
-    "Sanitätsplaner: Diensttausch abgelehnt",
-    `Hallo ${request.fromUser.name}\n\n${request.toUser.name} hat deine Tauschanfrage für ${formatDates(JSON.parse(request.dates))} abgelehnt.`
-  );
+  // For a broadcast request, a single decline is routine (most invitees won't
+  // take it) — notifying the requester every time would just be noise; the
+  // requester still hears about it once someone accepts or they cancel.
+  if (!request.groupId) {
+    await notifyUser(
+      request.fromUserId,
+      "Sanitätsplaner: Diensttausch abgelehnt",
+      `Hallo ${request.fromUser.name}\n\n${request.toUser.name} hat deine Tauschanfrage für ${formatDates(JSON.parse(request.dates))} abgelehnt.`
+    );
+  }
 
   revalidatePath("/dashboard");
   return {};
@@ -224,13 +282,16 @@ export async function cancelSwapRequestAction(requestId: number): Promise<{ erro
   }
 
   // Guard against a race with a concurrent accept: only transitions the row
-  // if it's still Pending, so an in-flight accept can't be overwritten.
+  // if it's still Pending, so an in-flight accept can't be overwritten. For a
+  // broadcast request, cancelling one row withdraws the whole group at once.
   const { count } = await prisma.swapRequest.updateMany({
-    where: { id: request.id, status: "Pending" },
+    where: request.groupId
+      ? { groupId: request.groupId, status: "Pending" }
+      : { id: request.id, status: "Pending" },
     data: { status: "Cancelled", decidedAt: new Date() },
   });
   if (count === 0) return { error: "Anfrage wurde bereits bearbeitet." };
-  await logAudit(session, "UPDATE", "SwapRequest", request.id, { action: "cancel" });
+  await logAudit(session, "UPDATE", "SwapRequest", request.id, { action: "cancel", groupId: request.groupId });
 
   revalidatePath("/dashboard");
   return {};

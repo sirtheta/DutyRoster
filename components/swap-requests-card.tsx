@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -52,6 +52,8 @@ export function SwapRequestsCard({
   const [colleagueId, setColleagueId] = useState("");
   const [comment, setComment] = useState("");
 
+  const BROADCAST = "__all__";
+
   function run(action: () => Promise<{ error?: string }>, successMessage: string) {
     startTransition(async () => {
       const result = await action();
@@ -73,11 +75,11 @@ export function SwapRequestsCard({
     run(
       () =>
         createSwapRequestAction({
-          toUserId: Number(colleagueId),
+          toUserId: colleagueId === BROADCAST ? null : Number(colleagueId),
           dates: week.dates,
           comment: comment || undefined,
         }),
-      "Tauschanfrage gesendet."
+      colleagueId === BROADCAST ? "Anfrage an alle gesendet." : "Tauschanfrage gesendet."
     );
     setWeekKey("");
     setColleagueId("");
@@ -101,7 +103,9 @@ export function SwapRequestsCard({
                 <div className="text-sm">
                   <span className="font-medium">{r.otherName}</span> möchte dir Dienste übergeben:{" "}
                   {r.datesLabel}
-                  {r.comment && <p className="text-xs text-muted-foreground">«{r.comment}»</p>}
+                  {r.comment && (
+                    <p className="whitespace-pre-wrap text-xs text-muted-foreground">«{r.comment}»</p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -177,6 +181,7 @@ export function SwapRequestsCard({
                     <SelectValue placeholder="Person wählen" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={BROADCAST}>Alle (wer zuerst annimmt)</SelectItem>
                     {colleagues.map((c) => (
                       <SelectItem key={c.id} value={String(c.id)}>
                         {c.name}
@@ -187,11 +192,12 @@ export function SwapRequestsCard({
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="swap-comment">Kommentar (optional)</Label>
-                <Input
+                <Textarea
                   id="swap-comment"
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  maxLength={500}
+                  maxLength={1000}
+                  rows={3}
                   className="w-64"
                 />
               </div>
@@ -200,8 +206,9 @@ export function SwapRequestsCard({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Die angefragte Person erhält eine Benachrichtigung und kann den Tausch annehmen oder
-              ablehnen. Beim Annehmen werden die Dienste automatisch übertragen.
+              Die angefragte(n) Person(en) erhalten eine Benachrichtigung und können den Tausch
+              annehmen oder ablehnen. Bei „Alle&rdquo; gilt: wer zuerst annimmt, übernimmt die
+              Dienste — die Anfrage wird bei den übrigen automatisch geschlossen.
             </p>
           </div>
         ) : (

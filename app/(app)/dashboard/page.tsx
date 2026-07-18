@@ -97,9 +97,22 @@ export default async function DashboardPage({
   const incoming = pendingSwaps
     .filter((r) => r.toUserId === userId)
     .map((r) => toSwapRow(r, r.fromUser.name));
-  const outgoing = pendingSwaps
-    .filter((r) => r.fromUserId === userId)
-    .map((r) => toSwapRow(r, r.toUser.name));
+
+  // Broadcast ("an alle") requests create one row per colleague, all sharing
+  // a groupId — collapse those back into a single outgoing entry. Cancelling
+  // it (via the representative id) withdraws the whole group at once.
+  const outgoingGroups = new Map<string, (typeof pendingSwaps)[number][]>();
+  for (const r of pendingSwaps.filter((r) => r.fromUserId === userId)) {
+    const key = r.groupId ?? `single-${r.id}`;
+    if (!outgoingGroups.has(key)) outgoingGroups.set(key, []);
+    outgoingGroups.get(key)!.push(r);
+  }
+  const outgoing = [...outgoingGroups.values()].map((rows) =>
+    toSwapRow(
+      rows[0],
+      rows.length > 1 ? `Alle (${rows.map((r) => r.toUser.name).join(", ")})` : rows[0].toUser.name
+    )
+  );
   const colleagues = users
     .filter((u) => u.id !== userId)
     .map((u) => ({ id: u.id, name: u.name }));

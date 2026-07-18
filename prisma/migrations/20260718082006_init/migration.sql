@@ -28,6 +28,7 @@ CREATE TABLE "SwapRequest" (
     "dates" TEXT NOT NULL,
     "comment" TEXT,
     "status" TEXT NOT NULL DEFAULT 'Pending',
+    "groupId" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "decidedAt" DATETIME,
     CONSTRAINT "SwapRequest_fromUserId_fkey" FOREIGN KEY ("fromUserId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
@@ -125,6 +126,9 @@ CREATE INDEX "SwapRequest_fromUserId_idx" ON "SwapRequest"("fromUserId");
 
 -- CreateIndex
 CREATE INDEX "SwapRequest_toUserId_idx" ON "SwapRequest"("toUserId");
+
+-- CreateIndex
+CREATE INDEX "SwapRequest_groupId_idx" ON "SwapRequest"("groupId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "PasswordResetToken_tokenHash_key" ON "PasswordResetToken"("tokenHash");
