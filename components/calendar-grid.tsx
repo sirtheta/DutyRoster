@@ -319,13 +319,13 @@ export function CalendarGrid({
     const isDragSource = dragCells?.some((c) => c.userId === u.id && c.date === d) ?? false;
     const previewValid = dragPreview?.valid.has(key) ?? false;
     const previewConflict = dragPreview?.conflict.has(key) ?? false;
-    // Blend a thin sliver of the row's tint into every cell's own color
-    // (entry-type color, or muted/background for empty cells) so a row stays
-    // traceable across a wide scroll without drowning out the type colors.
+    // Blend a thin sliver of the row's tint into empty cells only, so a row
+    // stays traceable across a wide scroll — filled cells keep the entry
+    // type's exact color so S/F/etc. look identical for every user.
     const baseBg = isHoliday || weekend ? "var(--muted)" : "var(--background)";
     const today = d === todayDate;
     let backgroundColor = info
-      ? `color-mix(in oklch, ${info.color} 85%, ${rowTint} 15%)`
+      ? info.color
       : `color-mix(in oklch, ${baseBg} 88%, ${rowTint} 12%)`;
     // Nudge every cell in today's column toward the primary color so the
     // current day stands out as a column, on top of its normal type/row tint.
