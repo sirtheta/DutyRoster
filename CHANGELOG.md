@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.5](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.4...DutyRoster-v0.4.5) (2026-07-18)
+
+
+### Features
+
+* **users:** hide terminated users from the list once their exit year ends ([b3784b2](https://github.com/sirtheta/DutyRoster/commit/b3784b2124d83ad00e9219dfb6e622df973a01d9))
+
+
+### Bug Fixes
+
+* **users:** keep terminated users visible on their exit year's calendar ([21546f1](https://github.com/sirtheta/DutyRoster/commit/21546f181eb6b7d1edd7cab9e461e2a81da00211))
+
 ## [0.4.4](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.3...DutyRoster-v0.4.4) (2026-07-18)
 
 
@@ -52,7 +64,6 @@
 
 ### Bug Fixes
 
-* **auth:** default session duration to 7 days ([6ff559c](https://github.com/sirtheta/DutyRoster/commit/6ff559cbb4ed0f5516d8923e8b3790020ce717f9))
 * **auth:** default session duration to 7 days and UI improvements ([8aa9334](https://github.com/sirtheta/DutyRoster/commit/8aa9334adf96ee0d3c881e3298b59ec0bdbdb710))
 
 ## [0.4.1](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.0...DutyRoster-v0.4.1) (2026-07-16)
