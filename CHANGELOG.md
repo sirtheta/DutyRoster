@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.6](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.5...DutyRoster-v0.4.6) (2026-07-18)
+
+
+### Bug Fixes
+
+* **calendar:** allow shift+drag to rubber-band select from an occupied cell ([86c2c7b](https://github.com/sirtheta/DutyRoster/commit/86c2c7bf20333b03a166c8b6f2336f9d37187641))
+* **calendar:** keep entry type colors consistent across user rows ([d0d462b](https://github.com/sirtheta/DutyRoster/commit/d0d462b9aee30b16ef56d0f10797e6f5dec3be11))
+
 ## [0.4.5](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.4...DutyRoster-v0.4.5) (2026-07-18)
 
 
