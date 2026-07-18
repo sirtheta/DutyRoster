@@ -11,6 +11,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "coverage/**",
     "next-env.d.ts",
+    // Generated at E2E test runtime (gitignored);
+    "tests/e2e/.data/**",
   ]),
 ]);
 

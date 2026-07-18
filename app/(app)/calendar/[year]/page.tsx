@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { requireSession } from "@/lib/permissions";
+import { rosterForYearWhere } from "@/lib/users";
 import { uncoveredWeeksInRange } from "@/lib/week";
 import { CalendarGrid } from "@/components/calendar-grid";
 import { AutomationPanel } from "@/components/automation-panel";
@@ -22,9 +23,9 @@ export default async function CalendarPage({
 
   const [users, entries, holidays] = await Promise.all([
     prisma.user.findMany({
-      where: { isActive: true },
+      where: rosterForYearWhere(year),
       orderBy: { rotationOrder: "asc" },
-      select: { id: true, name: true, rotationOrder: true },
+      select: { id: true, name: true, rotationOrder: true, exitDate: true },
     }),
     prisma.entry.findMany({
       where: { date: { startsWith: `${year}-` } },

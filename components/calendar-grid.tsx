@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { EntryType, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { TYPE_INFO } from "@/lib/entry-types";
-import { datesOfYear, isWeekend, toDateString, weekdayAbbr } from "@/lib/date";
+import { datesOfYear, formatDateCH, isWeekend, toDateString, weekdayAbbr } from "@/lib/date";
 import { bulkSetEntriesAction, moveEntryAction, moveEntriesAction } from "@/app/(app)/calendar/[year]/actions";
 import { MONTH_NAMES, cellKey, parseCellKey } from "@/components/calendar/types";
 import type { EntryRow, Move, PaintTool, UserRow } from "@/components/calendar/types";
@@ -436,7 +437,14 @@ export function CalendarGrid({
                   className="sticky left-0 z-10 border-b p-2 font-medium whitespace-nowrap"
                   style={{ backgroundColor: `color-mix(in oklch, var(--background) 78%, ${rowTints[i]} 22%)` }}
                 >
-                  {u.name}
+                  <span className="inline-flex items-center gap-1.5">
+                    {u.name}
+                    {u.exitDate && (
+                      <Badge variant="outline" title={`Ausgetreten am ${formatDateCH(u.exitDate)}`}>
+                        Ausgetreten
+                      </Badge>
+                    )}
+                  </span>
                 </td>
                 {dates.map((d) => renderDataCell(u, d, rowTints[i]))}
               </tr>
