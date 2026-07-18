@@ -110,15 +110,20 @@ function applyMigrations(db) {
     const checksum = crypto.createHash('sha256').update(sql).digest('hex');
     const now = new Date().toISOString();
 
-    const run = db.transaction(() => {
-      db.exec(sql);
-      db.prepare(
-        `INSERT INTO "_prisma_migrations"
-           (id, checksum, finished_at, migration_name, started_at, applied_steps_count)
-         VALUES (?, ?, ?, ?, ?, 1)`,
-      ).run(crypto.randomUUID(), checksum, now, name, now);
-    });
-    run();
+    db.pragma('foreign_keys = OFF');
+    try {
+      const run = db.transaction(() => {
+        db.exec(sql);
+        db.prepare(
+          `INSERT INTO "_prisma_migrations"
+             (id, checksum, finished_at, migration_name, started_at, applied_steps_count)
+           VALUES (?, ?, ?, ?, ?, 1)`,
+        ).run(crypto.randomUUID(), checksum, now, name, now);
+      });
+      run();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
 
     console.log(`[startup] Applied migration: ${name}`);
   }

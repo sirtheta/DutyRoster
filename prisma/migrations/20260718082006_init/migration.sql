@@ -6,15 +6,43 @@ CREATE TABLE "User" (
     "passwordHash" TEXT NOT NULL,
     "role" TEXT NOT NULL DEFAULT 'Viewer',
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "exitDate" TEXT,
     "rotationOrder" INTEGER NOT NULL DEFAULT 0,
     "notifyEnabled" BOOLEAN NOT NULL DEFAULT false,
-    "notifyChannel" TEXT NOT NULL DEFAULT 'Email',
+    "notifyEmail" BOOLEAN NOT NULL DEFAULT true,
+    "notifyTelegram" BOOLEAN NOT NULL DEFAULT false,
     "notifyWeekday" INTEGER NOT NULL DEFAULT 1,
     "notifyHour" INTEGER NOT NULL DEFAULT 7,
     "telegramChatId" TEXT,
     "icalToken" TEXT NOT NULL,
+    "icalIncludeVacation" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "SwapRequest" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "fromUserId" INTEGER NOT NULL,
+    "toUserId" INTEGER NOT NULL,
+    "dates" TEXT NOT NULL,
+    "comment" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'Pending',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "decidedAt" DATETIME,
+    CONSTRAINT "SwapRequest_fromUserId_fkey" FOREIGN KEY ("fromUserId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "SwapRequest_toUserId_fkey" FOREIGN KEY ("toUserId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "PasswordResetToken" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "userId" INTEGER NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" DATETIME NOT NULL,
+    "usedAt" DATETIME,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "PasswordResetToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -61,7 +89,7 @@ CREATE TABLE "SystemSettings" (
     "smtpPassword" TEXT,
     "smtpFromName" TEXT,
     "telegramBotToken" TEXT,
-    "defaultCanton" TEXT NOT NULL DEFAULT 'ZH',
+    "defaultCanton" TEXT NOT NULL DEFAULT 'BE',
     "updatedAt" DATETIME NOT NULL
 );
 
@@ -76,6 +104,7 @@ CREATE TABLE "PendingNotification" (
     "sentAt" DATETIME,
     "failedAt" DATETIME,
     "error" TEXT,
+    "attempts" INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT "PendingNotification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -87,6 +116,21 @@ CREATE UNIQUE INDEX "User_icalToken_key" ON "User"("icalToken");
 
 -- CreateIndex
 CREATE INDEX "User_rotationOrder_idx" ON "User"("rotationOrder");
+
+-- CreateIndex
+CREATE INDEX "SwapRequest_status_idx" ON "SwapRequest"("status");
+
+-- CreateIndex
+CREATE INDEX "SwapRequest_fromUserId_idx" ON "SwapRequest"("fromUserId");
+
+-- CreateIndex
+CREATE INDEX "SwapRequest_toUserId_idx" ON "SwapRequest"("toUserId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PasswordResetToken_tokenHash_key" ON "PasswordResetToken"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "PasswordResetToken_userId_idx" ON "PasswordResetToken"("userId");
 
 -- CreateIndex
 CREATE INDEX "Entry_date_idx" ON "Entry"("date");
