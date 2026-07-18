@@ -19,6 +19,10 @@ Ein Dienstplanungstool für das Sanitätsteam eines Unternehmens. Die Anwendung 
 - **Audit-Log** – protokolliert Änderungen an Plänen und Einstellungen
 - **Nächtliche Backups** – tägliche SQLite-Sicherung (`VACUUM INTO`) in den Datenordner, mit konfigurierbarer Aufbewahrungsdauer
 
+## Benutzerhandbuch
+
+Eine vollständige, bebilderte Anleitung für Admin und Editor (Anmeldung, Kalender, Diensttausch, Benutzerverwaltung, Einstellungen, Audit-Log) liegt unter [`docs/benutzerhandbuch.html`](docs/benutzerhandbuch.html) – im Browser öffnen.
+
 ## Technologie-Stack
 
 - [Next.js 16](https://nextjs.org/) (App Router) mit TypeScript und React 19

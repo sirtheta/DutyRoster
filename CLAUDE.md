@@ -8,6 +8,8 @@ This is a duty-roster / vacation planner ("Sanitätsplaner") built for a Swiss f
 
 The UI, user-facing text, and documentation are **in German**.
 
+A full illustrated end-user manual (Admin and Editor, with screenshots) lives at `docs/benutzerhandbuch.html` — open it in a browser. It documents app behavior for end users, not implementation details; regenerate its screenshots after significant UI changes rather than hand-editing stale ones.
+
 ---
 
 ## Web Application (repo root)
