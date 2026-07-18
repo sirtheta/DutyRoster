@@ -21,7 +21,8 @@ type DragPointerState = {
   // "move" relocates an existing entry (grabbed from an occupied cell);
   // "select" rubber-bands a rectangular range of cells to bulk-apply a type
   // to. Only "move" is available on touch/pen — "select" is mouse-only so it
-  // never fights with scrolling on mobile.
+  // never fights with scrolling on mobile. Holding Shift while starting a
+  // mouse drag forces "select" even over an occupied cell.
   mode: "move" | "select";
   userId: number;
   date: string;
@@ -88,7 +89,13 @@ export function useCalendarDrag({
     const anchor = { userId, date };
     const key = cellKey(userId, date);
     const fromSelection = selection.has(key);
-    const cells = fromSelection ? [...selection].map(parseCellKey) : [anchor];
+    // A rubber-band selection can include empty cells (e.g. weekends caught
+    // inside the rectangle) that have nothing to move — dragging those along
+    // would turn one harmless empty cell into a rejected whole-batch move
+    // server-side, so only cells that actually hold an entry come along.
+    const cells = fromSelection
+      ? [...selection].map(parseCellKey).filter((c) => entryMap.has(`${c.userId}-${c.date}`))
+      : [anchor];
     setDragAnchor(anchor);
     setDragCells(cells);
     setHoverCell(anchor);
@@ -251,14 +258,18 @@ export function useCalendarDrag({
     draggable: boolean,
     editable: boolean
   ) {
-    // Occupied cells always start a "move" drag (any pointer type, as
+    // Occupied cells normally start a "move" drag (any pointer type, as
     // before). Empty/editable cells start a "select" drag, but only for the
     // mouse — on touch/pen those cells stay scrollable, same as today.
-    const isMouseSelect = !draggable && editable && e.pointerType === "mouse";
+    // Shift+drag forces "select" even over an occupied cell — otherwise
+    // there was no way to rubber-band a range starting on an existing entry,
+    // since that would just grab the one entry to move it instead.
+    const forceSelect = e.pointerType === "mouse" && e.shiftKey && editable;
+    const isMouseSelect = (!draggable || forceSelect) && editable && e.pointerType === "mouse";
     if (!draggable && !isMouseSelect) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    const mode: DragPointerState["mode"] = draggable ? "move" : "select";
+    const mode: DragPointerState["mode"] = isMouseSelect ? "select" : "move";
     const state: DragPointerState = {
       pointerId: e.pointerId,
       mode,

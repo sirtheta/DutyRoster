@@ -51,6 +51,11 @@ export function CalendarToolbar({
               ? "Zellen anklicken zum Einfärben"
               : "Legende"}
       </span>
+      {displaySize === 0 && activeTool === null && (
+        <span className="text-xs text-muted-foreground">
+          Tipp: Shift + Ziehen markiert mehrere Zellen, auch ab einem belegten Tag.
+        </span>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {ENTRY_TYPES.map((type) => {
           const active = activeTool === type;
