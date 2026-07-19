@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.8](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.7...DutyRoster-v0.4.8) (2026-07-19)
+
+
+### Features
+
+* add user manual to web app ([72b4a7d](https://github.com/sirtheta/DutyRoster/commit/72b4a7dfe35c86bfbb01d686de1921c5dd089938))
+
+
+### Bug Fixes
+
+* **auth:** derive session-cookie name from AUTH_URL protocol, not NODE_ENV ([73b81c8](https://github.com/sirtheta/DutyRoster/commit/73b81c837178b78b2d996a42ae5a61c373687870))
+* **calendar:** stop toolbar tip line from causing layout jump ([dabf9ca](https://github.com/sirtheta/DutyRoster/commit/dabf9ca3bc9f0123a7a3cc07894183d801a73932))
+* **export:** allow Viewer role to download Excel plan export ([81ef849](https://github.com/sirtheta/DutyRoster/commit/81ef849793f466c5173125cf0d21f087ec69a99d))
+* **swaps:** prevent duplicate swap requests from a race on double-submit ([7b76345](https://github.com/sirtheta/DutyRoster/commit/7b7634585c5bd2c5e2b7d44d4c8c31e191b3078b))
+
 ## [0.4.7](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.6...DutyRoster-v0.4.7) (2026-07-19)
 
 
