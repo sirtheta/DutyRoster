@@ -15,16 +15,9 @@
  *          DISABLE_EMAIL=true DISABLE_TELEGRAM=true DISABLE_BACKUP=true \
  *          AUTH_SECRET=<any 32+ char string> AUTH_URL=http://localhost:3222 \
  *          npx next start --webpack -p 3222
- *      Gotcha: proxy.ts picks the NextAuth cookie name from NODE_ENV, not from
- *      AUTH_URL's protocol, so a *production* build served over plain http
- *      (as here) gets redirected straight back to /login — the cookie it
- *      looks for ("__Secure-authjs.session-token") doesn't match the one
- *      actually set ("authjs.session-token") when AUTH_URL is http. Only
- *      matters for this local http capture setup; a real deployment's
- *      AUTH_URL is https so the names agree. Work around it locally by
- *      temporarily changing proxy.ts's SESSION_COOKIE ternary to key off
- *      `process.env.AUTH_URL?.startsWith("https://")` instead of NODE_ENV,
- *      rebuilding, and reverting before committing.
+ *      (proxy.ts derives its cookie name from AUTH_URL's protocol, matching
+ *      Auth.js's own useSecureCookies default, so a plain-http AUTH_URL like
+ *      this one correctly gets the non-secure cookie name.)
  *   3. Capture:  MANUAL_BASE_URL=http://localhost:3222 npx tsx scripts/manual-screenshots.ts [names...]
  *      (omit names to capture everything; pass e.g. "dashboard notification-dialog"
  *      to only regenerate specific shots — see the `shots` list below for names)

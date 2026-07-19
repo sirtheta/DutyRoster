@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Optimistic auth check: read NextAuth session cookie without verifying JWT.
 // Full verification happens in Server Components via auth() from lib/auth.ts.
-const SESSION_COOKIE =
-  process.env.NODE_ENV === "production"
-    ? "__Secure-authjs.session-token"
-    : "authjs.session-token";
+const SESSION_COOKIE = process.env.AUTH_URL?.startsWith("https://")
+  ? "__Secure-authjs.session-token"
+  : "authjs.session-token";
 
 function buildCsp(nonce: string): string {
   const isDev = process.env.NODE_ENV !== "production";
