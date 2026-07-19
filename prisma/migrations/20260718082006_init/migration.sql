@@ -90,6 +90,7 @@ CREATE TABLE "SystemSettings" (
     "smtpUser" TEXT,
     "smtpPassword" TEXT,
     "smtpFromName" TEXT,
+    "smtpFromAddress" TEXT,
     "telegramBotToken" TEXT,
     "defaultCanton" TEXT NOT NULL DEFAULT 'BE',
     "updatedAt" DATETIME NOT NULL
