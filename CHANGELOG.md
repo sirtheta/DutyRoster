@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.7](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.6...DutyRoster-v0.4.7) (2026-07-19)
+
+
+### Features
+
+* **notifications:** allow 5-minute-precision notification times ([ed82e73](https://github.com/sirtheta/DutyRoster/commit/ed82e735a973bbe5eed252a2dcb338d0c17342e3))
+* **notifications:** include app link in swap-request notifications ([ade5f54](https://github.com/sirtheta/DutyRoster/commit/ade5f548cae0eae60d68277c16f16758a3ae54f9))
+* **settings:** allow a separate SMTP sender address ([#34](https://github.com/sirtheta/DutyRoster/issues/34)) ([9406b48](https://github.com/sirtheta/DutyRoster/commit/9406b4812106802759bace3ade5c351ecc6116e7))
+* **swaps:** only offer duty swaps to available colleagues ([f43dc1f](https://github.com/sirtheta/DutyRoster/commit/f43dc1fe56dd8ff8572afe81081f04cb2cb47085))
+* **users:** let admins test a user's notification channel ([c8a7cb4](https://github.com/sirtheta/DutyRoster/commit/c8a7cb457d1ae5978d5cb5c3402d6eba9c0ea995))
+
+
+### Bug Fixes
+
+* **calendar:** allow moving non-Dienst entries within the same user ([ab780ac](https://github.com/sirtheta/DutyRoster/commit/ab780acfce69fa54ced20a6afb36b991e198cde7))
+* load env.local in development when seeding database ([3fb2ca4](https://github.com/sirtheta/DutyRoster/commit/3fb2ca4fce73e099c2a47db17ffe2dd9de37d4b8))
+* **settings:** show connection test result inline instead of toast-only ([fc977ad](https://github.com/sirtheta/DutyRoster/commit/fc977ad7fd0ec596b980af227c93e7209cb9d63c))
+
 ## [0.4.6](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.5...DutyRoster-v0.4.6) (2026-07-18)
 
 
