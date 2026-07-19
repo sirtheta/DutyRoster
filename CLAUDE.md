@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Always use the `caveman` skill** for all responses in this repository (invoke it via the Skill tool at the start of each conversation/task).
+
 ## Repository Overview
 
 This is a duty-roster / vacation planner ("Sanitätsplaner") built for a Swiss first-aid team for a company, implemented as a Next.js 16 web dashboard (TypeScript, React 19, Tailwind CSS 4, Prisma + SQLite).
