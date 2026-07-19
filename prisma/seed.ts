@@ -1,9 +1,12 @@
+import { loadEnvConfig } from "@next/env";
 import { PrismaClient, UserRole } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { faker } from "@faker-js/faker";
 import { hash } from "bcryptjs";
 import { randomBytes } from "crypto";
 import { importHolidaysForYear } from "../lib/holidays";
+
+loadEnvConfig(process.cwd());
 
 function createClient() {
   const url = process.env.DATABASE_URL ?? "file:./data/DutyRoster.db";
@@ -34,7 +37,7 @@ async function ensureUsers() {
     adminHash = await hash(plainPassword, 10);
   }
 
-  const testHash = await hash("changeme123", 10);
+  const testHash = adminHash;
 
   const seedUsers = [
     { email: adminEmail, name: adminName, passwordHash: adminHash, role: UserRole.Admin, rotationOrder: 0 },
