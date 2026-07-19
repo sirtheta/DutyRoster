@@ -3,6 +3,9 @@ import type { Session } from "next-auth";
 import { createTestDatabase, createTestUser } from "../test-utils";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ host: "localhost:3000" }),
+}));
 
 const db = createTestDatabase();
 

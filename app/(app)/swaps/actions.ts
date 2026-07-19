@@ -11,6 +11,7 @@ import { logAudit } from "@/lib/audit";
 import { dispatchPendingNotifications, notifyChannelsFor } from "@/lib/notifications";
 import { notifyCalendarChange } from "@/lib/calendar-events";
 import { formatDateCH, parseDate, toDateString } from "@/lib/date";
+import { appOrigin } from "@/lib/origin";
 
 const log = logger.child({ module: "swaps" });
 
@@ -37,8 +38,10 @@ const createSchema = z.object({
 async function notifyUser(userId: number, subject: string, body: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return;
+  const link = `${await appOrigin()}/dashboard`;
+  const fullBody = `${body}\n\n${link}`;
   for (const channel of notifyChannelsFor(user)) {
-    await prisma.pendingNotification.create({ data: { userId, channel, subject, body } });
+    await prisma.pendingNotification.create({ data: { userId, channel, subject, body: fullBody } });
   }
   try {
     await dispatchPendingNotifications(prisma);
@@ -123,7 +126,7 @@ export async function createSwapRequestAction(rawInput: {
       `Hallo ${target.name}\n\n${session.user.name} möchte S-Dienste übergeben: ${formatDates(dates)}.` +
         (groupId ? " Die Anfrage wurde an alle verfügbaren Kolleginnen und Kollegen gestellt — wer zuerst annimmt, übernimmt." : "") +
         (comment ? `\n\nKommentar:\n${comment}` : "") +
-        `\n\nBitte bestätige oder lehne die Anfrage im Sanitätsplaner (Dashboard) ab.`
+        `\n\nBitte bestätige oder lehne die Anfrage im Sanitätsplaner ab.`
     );
   }
 

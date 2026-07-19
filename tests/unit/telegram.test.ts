@@ -40,7 +40,27 @@ describe("sendTelegramMessage", () => {
       "https://api.telegram.org/botbot-token/sendMessage",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ chat_id: "12345", text: "Hallo" }),
+        body: JSON.stringify({ chat_id: "12345", text: "Hallo", parse_mode: "HTML" }),
+      })
+    );
+  });
+
+  it("turns bare URLs into clickable links and escapes HTML-special characters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await sendTelegramMessage(settings(), "12345", "Info <wichtig> & Link: http://localhost:3000/dashboard");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/botbot-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          chat_id: "12345",
+          text:
+            'Info &lt;wichtig&gt; &amp; Link: <a href="http://localhost:3000/dashboard">http://localhost:3000/dashboard</a>',
+          parse_mode: "HTML",
+        }),
       })
     );
   });
