@@ -89,14 +89,6 @@ export async function createSwapRequestAction(rawInput: {
     return { error: "Nur eigene S-Dienste können zum Tausch angeboten werden." };
   }
 
-  const openRequests = await prisma.swapRequest.findMany({
-    where: { fromUserId, status: "Pending" },
-  });
-  const openDates = new Set(openRequests.flatMap((r) => JSON.parse(r.dates) as string[]));
-  if (dates.some((d) => openDates.has(d))) {
-    return { error: "Für mindestens einen dieser Tage besteht bereits eine offene Anfrage." };
-  }
-
   const candidates =
     toUserId === null
       ? await prisma.user.findMany({ where: { isActive: true, id: { not: fromUserId } } })
@@ -123,14 +115,37 @@ export async function createSwapRequestAction(rawInput: {
     };
   }
 
-  const groupId = targets.length > 1 ? randomUUID() : null;
-  const requests = await prisma.$transaction(
-    targets.map((target) =>
-      prisma.swapRequest.create({
-        data: { fromUserId, toUserId: target.id, dates: JSON.stringify(dates), comment, groupId },
-      })
-    )
-  );
+  // The "no open request yet" check and the create happen inside one
+  // transaction so two concurrent submits for the same dates (e.g. a
+  // double-click) can't both pass the check and double-create — SQLite
+  // serializes transactions, so the second call sees the first one's rows.
+  let requests;
+  try {
+    requests = await prisma.$transaction(async (tx) => {
+      const openRequests = await tx.swapRequest.findMany({
+        where: { fromUserId, status: "Pending" },
+      });
+      const openDates = new Set(openRequests.flatMap((r) => JSON.parse(r.dates) as string[]));
+      if (dates.some((d) => openDates.has(d))) {
+        throw new Error("OPEN_REQUEST_EXISTS");
+      }
+
+      const groupId = targets.length > 1 ? randomUUID() : null;
+      return Promise.all(
+        targets.map((target) =>
+          tx.swapRequest.create({
+            data: { fromUserId, toUserId: target.id, dates: JSON.stringify(dates), comment, groupId },
+          })
+        )
+      );
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "OPEN_REQUEST_EXISTS") {
+      return { error: "Für mindestens einen dieser Tage besteht bereits eine offene Anfrage." };
+    }
+    throw err;
+  }
+  const groupId = requests.length > 1 ? requests[0].groupId : null;
   await logAudit(session, "CREATE", "SwapRequest", requests[0].id, {
     toUserIds: targets.map((t) => t.id),
     groupId,
