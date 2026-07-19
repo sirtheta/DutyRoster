@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { SystemSettings } from "@prisma/client";
 import {
@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { HelpDialog } from "@/components/ui/help-dialog";
 
+type TestResult = { success?: boolean; error?: string; message?: string };
+
 export function SettingsForm({
   settings,
   telegramBotTokenSet,
@@ -26,6 +28,8 @@ export function SettingsForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [testPending, startTest] = useTransition();
   const [telegramTestPending, startTelegramTest] = useTransition();
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [telegramTestResult, setTelegramTestResult] = useState<TestResult | null>(null);
 
   useEffect(() => {
     if (state?.success) toast.success("Einstellungen gespeichert.");
@@ -34,26 +38,33 @@ export function SettingsForm({
   function runConnectionTest() {
     if (!formRef.current) return;
     const formData = new FormData(formRef.current);
+    setTestResult(null);
     startTest(async () => {
       const result = await testSmtpConnectionAction(formData);
-      if (result.success) toast.success("SMTP-Verbindung erfolgreich getestet.");
-      if (result.error) toast.error(result.error);
+      if (result.success) {
+        setTestResult({ success: true, message: "Verbindung erfolgreich" });
+      } else {
+        setTestResult({ error: result.error });
+      }
     });
   }
 
   function runTelegramTest() {
     if (!formRef.current) return;
     const formData = new FormData(formRef.current);
+    setTelegramTestResult(null);
     startTelegramTest(async () => {
       const result = await testTelegramConnectionAction(formData);
       if (result.success) {
-        toast.success(
-          result.botUsername
-            ? `Telegram-Verbindung erfolgreich getestet (@${result.botUsername}).`
-            : "Telegram-Verbindung erfolgreich getestet."
-        );
+        setTelegramTestResult({
+          success: true,
+          message: result.botUsername
+            ? `Verbindung erfolgreich (@${result.botUsername})`
+            : "Verbindung erfolgreich",
+        });
+      } else {
+        setTelegramTestResult({ error: result.error });
       }
-      if (result.error) toast.error(result.error);
     });
   }
 
@@ -87,10 +98,14 @@ export function SettingsForm({
             <Label htmlFor="smtpFromName">Absendername</Label>
             <Input id="smtpFromName" name="smtpFromName" defaultValue={settings?.smtpFromName ?? ""} />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-2 flex items-center gap-3">
             <Button type="button" variant="outline" disabled={testPending} onClick={runConnectionTest}>
               {testPending ? "Wird getestet…" : "Verbindung testen"}
             </Button>
+            {testResult?.error && <p className="text-xs text-destructive">{testResult.error}</p>}
+            {testResult?.success && (
+              <p className="text-xs text-green-600 dark:text-green-400">{testResult.message}</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -134,10 +149,16 @@ export function SettingsForm({
               )}
             </p>
           </div>
-          <div>
+          <div className="flex items-center gap-3">
             <Button type="button" variant="outline" disabled={telegramTestPending} onClick={runTelegramTest}>
               {telegramTestPending ? "Wird getestet…" : "Verbindung testen"}
             </Button>
+            {telegramTestResult?.error && (
+              <p className="text-xs text-destructive">{telegramTestResult.error}</p>
+            )}
+            {telegramTestResult?.success && (
+              <p className="text-xs text-green-600 dark:text-green-400">{telegramTestResult.message}</p>
+            )}
           </div>
         </CardContent>
       </Card>
