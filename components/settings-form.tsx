@@ -21,7 +21,10 @@ export function SettingsForm({
   settings,
   telegramBotTokenSet,
 }: {
-  settings: Pick<SystemSettings, "smtpHost" | "smtpPort" | "smtpUser" | "smtpFromName"> | null;
+  settings: Pick<
+    SystemSettings,
+    "smtpHost" | "smtpPort" | "smtpUser" | "smtpFromName" | "smtpFromAddress"
+  > | null;
   telegramBotTokenSet: boolean;
 }) {
   const [state, formAction, pending] = useActionState(updateSettingsAction, undefined);
@@ -97,6 +100,22 @@ export function SettingsForm({
           <div className="col-span-2 flex flex-col gap-2">
             <Label htmlFor="smtpFromName">Absendername</Label>
             <Input id="smtpFromName" name="smtpFromName" defaultValue={settings?.smtpFromName ?? ""} />
+          </div>
+          <div className="col-span-2 flex flex-col gap-2">
+            <Label htmlFor="smtpFromAddress">
+              Absender-E-Mail <span className="text-muted-foreground">(leer lassen = gleich wie Benutzer)</span>
+            </Label>
+            <Input
+              id="smtpFromAddress"
+              name="smtpFromAddress"
+              type="email"
+              defaultValue={settings?.smtpFromAddress ?? ""}
+            />
+            <p className="text-xs text-muted-foreground">
+              Wird als Absenderadresse verwendet, falls sie sich vom Benutzer oben unterscheidet (z. B. Login mit
+              info@firma.ch, Versand als sanitaet@firma.ch). Funktioniert nur, wenn der Mailserver das für die
+              angegebene Domain zulässt.
+            </p>
           </div>
           <div className="col-span-2 flex items-center gap-3">
             <Button type="button" variant="outline" disabled={testPending} onClick={runConnectionTest}>

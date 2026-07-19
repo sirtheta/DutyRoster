@@ -192,11 +192,12 @@ model AuditLog {
 model SystemSettings {
   id Int @id @default(1)
 
-  smtpHost     String?
-  smtpPort     Int?
-  smtpUser     String?
-  smtpPassword String? // AES-encrypted
-  smtpFromName String?
+  smtpHost        String?
+  smtpPort        Int?
+  smtpUser        String?
+  smtpPassword    String? // AES-encrypted
+  smtpFromName    String?
+  smtpFromAddress String? // optional envelope/header From address, if different from smtpUser
 
   telegramBotToken String? // AES-encrypted
 

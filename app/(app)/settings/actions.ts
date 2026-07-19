@@ -15,6 +15,7 @@ const settingsSchema = z.object({
   smtpPort: z.coerce.number().int().optional(),
   smtpUser: z.string().optional(),
   smtpFromName: z.string().optional(),
+  smtpFromAddress: z.string().optional(),
   telegramBotToken: z.string().optional(),
 });
 
@@ -28,12 +29,16 @@ export async function updateSettingsAction(
     smtpPort: formData.get("smtpPort") || undefined,
     smtpUser: formData.get("smtpUser") || undefined,
     smtpFromName: formData.get("smtpFromName") || undefined,
+    smtpFromAddress: formData.get("smtpFromAddress") || undefined,
     telegramBotToken: formData.get("telegramBotToken") || undefined,
   });
   if (!parsed.success) return { error: "Ungültige Eingabe." };
 
   const smtpPassword = formData.get("smtpPassword");
   const data: Record<string, unknown> = { ...parsed.data };
+  // Unlike secrets, a blank field here means "clear it", not "keep the stored value" —
+  // zod turns "" into undefined, which Prisma silently ignores on update, so coerce explicitly.
+  data.smtpFromAddress = parsed.data.smtpFromAddress ?? null;
   if (typeof smtpPassword === "string" && smtpPassword.length > 0) {
     data.smtpPassword = encryptSecret(smtpPassword);
   }

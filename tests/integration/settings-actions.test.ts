@@ -60,6 +60,7 @@ describe("settings actions", () => {
         smtpPort: "587",
         smtpUser: "user@example.com",
         smtpPassword: "hunter2",
+        smtpFromAddress: "sanitaet@example.com",
         telegramBotToken: "bot-token",
       })
     );
@@ -67,11 +68,24 @@ describe("settings actions", () => {
     expect(res.success).toBe(true);
     const settings = await db.prisma.systemSettings.findUniqueOrThrow({ where: { id: 1 } });
     expect(settings.smtpHost).toBe("smtp.example.com");
+    expect(settings.smtpFromAddress).toBe("sanitaet@example.com");
     expect(settings.smtpPassword).not.toBe("hunter2");
     expect(settings.smtpPassword).toMatch(/^enc:v1:/);
     expect(settings.telegramBotToken).toMatch(/^enc:v1:/);
     const audit = await db.prisma.auditLog.findFirstOrThrow({ where: { entityType: "Settings" } });
     expect(audit.action).toBe("SETTINGS");
+  });
+
+  it("clears a previously set smtpFromAddress when the field is submitted blank", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+    await db.prisma.systemSettings.create({ data: { id: 1, smtpFromAddress: "sanitaet@example.com" } });
+
+    const { updateSettingsAction } = await import("@/app/(app)/settings/actions");
+    await updateSettingsAction(undefined, formData({ smtpHost: "smtp.example.com", smtpFromAddress: "" }));
+
+    const settings = await db.prisma.systemSettings.findUniqueOrThrow({ where: { id: 1 } });
+    expect(settings.smtpFromAddress).toBeNull();
   });
 
   it("leaves an existing telegramBotToken untouched when the field is left blank", async () => {
