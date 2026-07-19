@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, KeyRound, LogOut, User as UserIcon } from "lucide-react";
+import { Bell, HelpCircle, KeyRound, LogOut, User as UserIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,6 +60,11 @@ export function UserMenu({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setPasswordDialogOpen(true)}>
             <KeyRound className="mr-2 inline h-4 w-4" /> Passwort ändern
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <a href="/benutzerhandbuch.html" target="_blank" rel="noopener noreferrer">
+              <HelpCircle className="mr-2 inline h-4 w-4" /> Benutzerhandbuch
+            </a>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => signOutAction()}>

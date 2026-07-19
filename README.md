@@ -21,7 +21,7 @@ Ein Dienstplanungstool für das Sanitätsteam eines Unternehmens. Die Anwendung 
 
 ## Benutzerhandbuch
 
-Eine vollständige, bebilderte Anleitung für Admin und Editor (Anmeldung, Kalender, Diensttausch, Benutzerverwaltung, Einstellungen, Audit-Log) liegt unter [`docs/benutzerhandbuch.html`](docs/benutzerhandbuch.html) – im Browser öffnen.
+Eine vollständige, bebilderte Anleitung für Admin und Editor (Anmeldung, Kalender, Diensttausch, Benutzerverwaltung, Einstellungen, Audit-Log) liegt unter [`public/benutzerhandbuch.html`](public/benutzerhandbuch.html) – im Browser öffnen, oder in der laufenden App unter `/benutzerhandbuch.html`.
 
 ## Technologie-Stack
 
