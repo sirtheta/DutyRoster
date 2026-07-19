@@ -33,6 +33,7 @@ next-env.d.ts
 /tests/e2e/.data/
 /playwright-report/
 /test-results/
+/scripts/.manual-shots/
 /data/*.db-journal
 /data/*.db-wal
 /data/*.db-shm
