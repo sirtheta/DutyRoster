@@ -1,8 +1,13 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
-import type { User } from "@prisma/client";
-import { createUserAction, updateUserAction } from "@/app/(app)/users/actions";
+import { useActionState, useRef, useState, useTransition, type ReactNode } from "react";
+import { toast } from "sonner";
+import type { NotifyChannel, User } from "@prisma/client";
+import {
+  createUserAction,
+  updateUserAction,
+  sendUserTestNotificationAction,
+} from "@/app/(app)/users/actions";
 
 /**
  * The subset of `User` the admin UI needs. Deliberately excludes
@@ -51,8 +56,28 @@ export function UserFormDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [notifyEnabled, setNotifyEnabled] = useState(user?.notifyEnabled ?? false);
+  const [notifyEmail, setNotifyEmail] = useState(user?.notifyEmail ?? true);
+  const [notifyTelegram, setNotifyTelegram] = useState(user?.notifyTelegram ?? false);
   const action = mode === "create" ? createUserAction : updateUserAction;
   const [state, formAction, pending] = useActionState(action, undefined);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [testPending, startTest] = useTransition();
+  const [testingChannel, setTestingChannel] = useState<NotifyChannel | null>(null);
+
+  function runTest(channel: NotifyChannel) {
+    if (!formRef.current) return;
+    const formData = new FormData(formRef.current);
+    const name = String(formData.get("name") ?? "");
+    const target =
+      channel === "Email" ? String(formData.get("email") ?? "") : String(formData.get("telegramChatId") ?? "");
+    if (!target) return;
+    setTestingChannel(channel);
+    startTest(async () => {
+      const result = await sendUserTestNotificationAction(channel, name, target);
+      if (result.success) toast.success("Test-Benachrichtigung gesendet.");
+      if (result.error) toast.error(result.error);
+    });
+  }
 
   return (
     <Dialog
@@ -71,6 +96,7 @@ export function UserFormDialog({
           <DialogTitle>{mode === "create" ? "Neuer Benutzer" : `Benutzer bearbeiten: ${user?.name}`}</DialogTitle>
         </DialogHeader>
         <form
+          ref={formRef}
           action={async (formData) => {
             await formAction(formData);
             setOpen(false);
@@ -135,7 +161,8 @@ export function UserFormDialog({
                       id="notifyEmail"
                       name="notifyEmail"
                       type="checkbox"
-                      defaultChecked={user?.notifyEmail ?? true}
+                      checked={notifyEmail}
+                      onChange={(e) => setNotifyEmail(e.target.checked)}
                       className="h-4 w-4"
                     />
                     <Label htmlFor="notifyEmail" className="font-normal">
@@ -147,7 +174,8 @@ export function UserFormDialog({
                       id="notifyTelegram"
                       name="notifyTelegram"
                       type="checkbox"
-                      defaultChecked={user?.notifyTelegram ?? false}
+                      checked={notifyTelegram}
+                      onChange={(e) => setNotifyTelegram(e.target.checked)}
                       className="h-4 w-4"
                     />
                     <Label htmlFor="notifyTelegram" className="font-normal">
@@ -185,13 +213,39 @@ export function UserFormDialog({
                   z. B. 7 = 07:00 Uhr, lokale Zeit (Europe/Zurich)
                 </span>
               </div>
-              <div className="col-span-2 flex flex-col gap-2">
-                <Label htmlFor="telegramChatId">Telegram Chat-ID</Label>
-                <Input id="telegramChatId" name="telegramChatId" defaultValue={user?.telegramChatId ?? ""} />
-              </div>
+              {notifyTelegram && (
+                <div className="col-span-2 flex flex-col gap-2">
+                  <Label htmlFor="telegramChatId">Telegram Chat-ID</Label>
+                  <Input id="telegramChatId" name="telegramChatId" defaultValue={user?.telegramChatId ?? ""} />
+                </div>
+              )}
           </div>
           {state?.error && <p className="col-span-2 text-sm text-destructive">{state.error}</p>}
-          <DialogFooter className="col-span-2">
+          <DialogFooter className="col-span-2 gap-2 sm:justify-between">
+            {notifyEnabled && (
+              <div className="flex gap-2">
+                {notifyEmail && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={testPending}
+                    onClick={() => runTest("Email")}
+                  >
+                    {testPending && testingChannel === "Email" ? "Wird gesendet…" : "E-Mail testen"}
+                  </Button>
+                )}
+                {notifyTelegram && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={testPending}
+                    onClick={() => runTest("Telegram")}
+                  >
+                    {testPending && testingChannel === "Telegram" ? "Wird gesendet…" : "Telegram testen"}
+                  </Button>
+                )}
+              </div>
+            )}
             <Button type="submit" disabled={pending}>
               {pending ? "Speichern…" : "Speichern"}
             </Button>

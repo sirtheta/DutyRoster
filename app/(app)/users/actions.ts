@@ -8,10 +8,12 @@ import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { bcryptRounds } from "@/lib/password";
-import { UserRole } from "@prisma/client";
+import { UserRole, NotifyChannel } from "@prisma/client";
 import { parseDate, toDateString } from "@/lib/date";
 import { notifyCalendarChange } from "@/lib/calendar-events";
 import { generateAutomationAction } from "@/app/(app)/calendar/[year]/actions";
+import { sendPlanEmail } from "@/lib/email";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 const userSchema = z
   .object({
@@ -184,4 +186,38 @@ export async function terminateUserAction(
   }
 
   return {};
+}
+
+/**
+ * Lets an admin test a user's notification channel from the create/edit
+ * dialog using the currently typed-in email/Telegram chat ID, without first
+ * saving the form — mirrors `sendTestNotificationAction` in `app/(app)/actions.ts`,
+ * but targets the edited user's address instead of the caller's own.
+ */
+export async function sendUserTestNotificationAction(
+  channel: NotifyChannel,
+  name: string,
+  target: string
+): Promise<{ error?: string; success?: boolean }> {
+  const session = await requireAdmin();
+
+  const settings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+  if (!settings) return { error: "Systemeinstellungen fehlen. Bitte einen Admin kontaktieren." };
+
+  const channelLabel = channel === "Email" ? "E-Mail" : "Telegram";
+  const subject = "Sanitätsplaner: Test-Benachrichtigung";
+  const body = `Hallo ${name}\n\nDies ist eine Test-Benachrichtigung des Sanitätsplaners. Wenn du diese Nachricht erhältst, funktioniert dein Kanal (${channelLabel}).`;
+
+  try {
+    if (channel === "Email") {
+      await sendPlanEmail(settings, target, subject, body);
+    } else {
+      await sendTelegramMessage(settings, target, body);
+    }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Versand fehlgeschlagen." };
+  }
+
+  await logAudit(session, "SETTINGS", "User", undefined, { action: "testUserNotification", channel, target });
+  return { success: true };
 }
