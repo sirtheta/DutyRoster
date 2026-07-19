@@ -57,6 +57,48 @@ describe("swap request actions", () => {
     expect(audit.action).toBe("CREATE");
   });
 
+  it("rejects a single target who is not available on the requested days", async () => {
+    const { prisma } = db;
+    const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com" }) });
+    const target = await prisma.user.create({ data: createTestUser({ email: "target@example.com" }) });
+    await seedDutyWeek(owner.id);
+    await prisma.entry.create({ data: { userId: target.id, date: WEEK[2], type: "F" } });
+    currentSession = sessionFor(owner.id, "Viewer");
+
+    const { createSwapRequestAction } = await import("@/app/(app)/swaps/actions");
+    const res = await createSwapRequestAction({ toUserId: target.id, dates: WEEK });
+    expect(res.error).toMatch(/nicht verfügbar/);
+    expect(await prisma.swapRequest.findFirst()).toBeNull();
+  });
+
+  it("skips unavailable colleagues on a broadcast and errors if none remain", async () => {
+    const { prisma } = db;
+    const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com" }) });
+    const colleagueA = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Viewer" }) });
+    const colleagueB = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Viewer" }) });
+    await seedDutyWeek(owner.id);
+    // B has vacation during the offered week — should be skipped.
+    await prisma.entry.create({ data: { userId: colleagueB.id, date: WEEK[0], type: "F" } });
+    currentSession = sessionFor(owner.id, "Viewer", "Owner");
+
+    const { createSwapRequestAction } = await import("@/app/(app)/swaps/actions");
+    const res = await createSwapRequestAction({ toUserId: null, dates: WEEK });
+    expect(res.error).toBeUndefined();
+
+    const requests = await prisma.swapRequest.findMany();
+    expect(requests).toHaveLength(1);
+    expect(requests[0].toUserId).toBe(colleagueA.id);
+    expect(requests[0].groupId).toBeNull();
+    const notification = await prisma.pendingNotification.findFirst({ where: { userId: colleagueB.id } });
+    expect(notification).toBeNull();
+
+    // Now A is also unavailable — nobody left to offer the week to.
+    await prisma.entry.create({ data: { userId: colleagueA.id, date: WEEK[1], type: "M" } });
+    await prisma.swapRequest.deleteMany();
+    const res2 = await createSwapRequestAction({ toUserId: null, dates: WEEK });
+    expect(res2.error).toMatch(/Kein Kollege ist in diesem Zeitraum verfügbar/);
+  });
+
   it("rejects requests for days that are not the requester's own S-duties", async () => {
     const { prisma } = db;
     const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com" }) });
@@ -131,6 +173,50 @@ describe("swap request actions", () => {
 
     const updated = await prisma.swapRequest.findMany();
     expect(updated.every((r) => r.status === "Cancelled")).toBe(true);
+  });
+
+  it("notifies the recipient when a single request is withdrawn", async () => {
+    const { prisma } = db;
+    const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com", role: "Viewer" }) });
+    const target = await prisma.user.create({ data: createTestUser({ email: "target@example.com", role: "Viewer" }) });
+    await seedDutyWeek(owner.id);
+    currentSession = sessionFor(owner.id, "Viewer", "Owner");
+
+    const { createSwapRequestAction, cancelSwapRequestAction } = await import("@/app/(app)/swaps/actions");
+    await createSwapRequestAction({ toUserId: target.id, dates: WEEK });
+    const request = await prisma.swapRequest.findFirstOrThrow();
+
+    const res = await cancelSwapRequestAction(request.id);
+    expect(res.error).toBeUndefined();
+
+    const notification = await prisma.pendingNotification.findFirstOrThrow({
+      where: { userId: target.id, subject: { contains: "zurückgezogen" } },
+    });
+    expect(notification.body).toContain("Owner");
+  });
+
+  it("notifies every still-pending recipient when a broadcast request is withdrawn", async () => {
+    const { prisma } = db;
+    const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com", role: "Viewer" }) });
+    const colleagueA = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Viewer" }) });
+    const colleagueB = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Viewer" }) });
+    await seedDutyWeek(owner.id);
+    currentSession = sessionFor(owner.id, "Viewer", "Owner");
+
+    const { createSwapRequestAction, cancelSwapRequestAction } = await import("@/app/(app)/swaps/actions");
+    await createSwapRequestAction({ toUserId: null, dates: WEEK });
+    const requests = await prisma.swapRequest.findMany();
+    expect(requests).toHaveLength(2);
+
+    const res = await cancelSwapRequestAction(requests[0].id);
+    expect(res.error).toBeUndefined();
+
+    for (const colleagueId of [colleagueA.id, colleagueB.id]) {
+      const notification = await prisma.pendingNotification.findFirstOrThrow({
+        where: { userId: colleagueId, subject: { contains: "zurückgezogen" } },
+      });
+      expect(notification.body).toContain("Owner");
+    }
   });
 
   it("rejects past dates, self-swaps, and overlapping open requests", async () => {

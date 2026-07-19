@@ -26,6 +26,8 @@ export interface SwapWeekOption {
   key: string;
   label: string;
   dates: string[];
+  /** IDs of colleagues with no entry on any day of this week. */
+  availableColleagueIds: number[];
 }
 
 export interface SwapRequestRow {
@@ -53,6 +55,17 @@ export function SwapRequestsCard({
   const [comment, setComment] = useState("");
 
   const BROADCAST = "__all__";
+
+  const selectedWeek = myWeeks.find((w) => w.key === weekKey);
+  const availableColleagues = selectedWeek
+    ? colleagues.filter((c) => selectedWeek.availableColleagueIds.includes(c.id))
+    : colleagues;
+  const noneAvailable = !!selectedWeek && availableColleagues.length === 0;
+
+  function handleWeekChange(key: string) {
+    setWeekKey(key);
+    setColleagueId("");
+  }
 
   function run(action: () => Promise<{ error?: string }>, successMessage: string) {
     startTransition(async () => {
@@ -161,7 +174,7 @@ export function SwapRequestsCard({
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex flex-col gap-2">
                 <Label>Dienstwoche</Label>
-                <Select value={weekKey} onValueChange={setWeekKey}>
+                <Select value={weekKey} onValueChange={handleWeekChange}>
                   <SelectTrigger className="w-64">
                     <SelectValue placeholder="Woche wählen" />
                   </SelectTrigger>
@@ -174,34 +187,46 @@ export function SwapRequestsCard({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col gap-2">
-                <Label>Übernehmen soll</Label>
-                <Select value={colleagueId} onValueChange={setColleagueId}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Person wählen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={BROADCAST}>Alle (wer zuerst annimmt)</SelectItem>
-                    {colleagues.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="swap-comment">Kommentar (optional)</Label>
-                <Textarea
-                  id="swap-comment"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  maxLength={1000}
-                  rows={3}
-                  className="w-64"
-                />
-              </div>
-              <Button size="sm" disabled={isPending} onClick={submitRequest}>
+              {noneAvailable ? (
+                <p className="text-xs text-destructive">
+                  Keine Kolleg:innen für diese Woche verfügbar.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <Label>Übernehmen soll</Label>
+                  <Select value={colleagueId} onValueChange={setColleagueId}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Person wählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={BROADCAST}>Alle (wer zuerst annimmt)</SelectItem>
+                      {availableColleagues.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {!noneAvailable && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="swap-comment">Kommentar (optional)</Label>
+                  <Textarea
+                    id="swap-comment"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    maxLength={1000}
+                    rows={3}
+                    className="w-64"
+                  />
+                </div>
+              )}
+              <Button
+                size="sm"
+                disabled={isPending || !weekKey || !colleagueId}
+                onClick={submitRequest}
+              >
                 {isPending ? "Wird gesendet…" : "Anfragen"}
               </Button>
             </div>

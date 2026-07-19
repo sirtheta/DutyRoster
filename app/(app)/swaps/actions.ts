@@ -97,13 +97,31 @@ export async function createSwapRequestAction(rawInput: {
     return { error: "Für mindestens einen dieser Tage besteht bereits eine offene Anfrage." };
   }
 
-  const targets =
+  const candidates =
     toUserId === null
       ? await prisma.user.findMany({ where: { isActive: true, id: { not: fromUserId } } })
       : await prisma.user
           .findUnique({ where: { id: toUserId } })
           .then((u) => (u && u.isActive ? [u] : []));
-  if (targets.length === 0) return { error: "Benutzer nicht gefunden." };
+  if (candidates.length === 0) return { error: "Benutzer nicht gefunden." };
+
+  // Only offer the swap to colleagues who have no entry at all on any of the
+  // requested days (same rule enforced at accept time) — a broadcast silently
+  // skips unavailable colleagues, a single target is rejected outright.
+  const blocked = await prisma.entry.findMany({
+    where: { userId: { in: candidates.map((c) => c.id) }, date: { in: dates } },
+    select: { userId: true },
+  });
+  const blockedIds = new Set(blocked.map((e) => e.userId));
+  const targets = candidates.filter((c) => !blockedIds.has(c.id));
+  if (targets.length === 0) {
+    return {
+      error:
+        toUserId === null
+          ? "Kein Kollege ist in diesem Zeitraum verfügbar."
+          : "Diese Person ist in diesem Zeitraum nicht verfügbar.",
+    };
+  }
 
   const groupId = targets.length > 1 ? randomUUID() : null;
   const requests = await prisma.$transaction(
@@ -284,17 +302,34 @@ export async function cancelSwapRequestAction(requestId: number): Promise<{ erro
     return { error: "Keine Berechtigung für diese Anfrage." };
   }
 
-  // Guard against a race with a concurrent accept: only transitions the row
-  // if it's still Pending, so an in-flight accept can't be overwritten. For a
+  // Guard against a race with a concurrent accept: select and update the
+  // still-Pending rows inside one transaction, so an in-flight accept can't
+  // be overwritten and can't be double-notified as "cancelled" either. For a
   // broadcast request, cancelling one row withdraws the whole group at once.
-  const { count } = await prisma.swapRequest.updateMany({
-    where: request.groupId
-      ? { groupId: request.groupId, status: "Pending" }
-      : { id: request.id, status: "Pending" },
-    data: { status: "Cancelled", decidedAt: new Date() },
+  const cancelled = await prisma.$transaction(async (tx) => {
+    const toCancel = await tx.swapRequest.findMany({
+      where: request.groupId
+        ? { groupId: request.groupId, status: "Pending" }
+        : { id: request.id, status: "Pending" },
+      include: { toUser: true },
+    });
+    if (toCancel.length === 0) return null;
+    await tx.swapRequest.updateMany({
+      where: { id: { in: toCancel.map((r) => r.id) } },
+      data: { status: "Cancelled", decidedAt: new Date() },
+    });
+    return toCancel;
   });
-  if (count === 0) return { error: "Anfrage wurde bereits bearbeitet." };
+  if (!cancelled) return { error: "Anfrage wurde bereits bearbeitet." };
   await logAudit(session, "UPDATE", "SwapRequest", request.id, { action: "cancel", groupId: request.groupId });
+
+  for (const r of cancelled) {
+    await notifyUser(
+      r.toUserId,
+      "Sanitätsplaner: Tauschanfrage zurückgezogen",
+      `Hallo ${r.toUser.name}\n\n${session.user.name} hat die Tauschanfrage für ${formatDates(JSON.parse(r.dates))} zurückgezogen.`
+    );
+  }
 
   revalidatePath("/dashboard");
   return {};

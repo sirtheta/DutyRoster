@@ -85,12 +85,35 @@ export default async function DashboardPage({
       .filter((r) => r.fromUserId === userId)
       .flatMap((r) => JSON.parse(r.dates) as string[])
   );
+  const colleagues = activeUsers
+    .filter((u) => u.id !== userId)
+    .map((u) => ({ id: u.id, name: u.name }));
+
+  // Per-week colleague availability for the swap request form: a colleague is
+  // only offered a week if they have no entry at all on any day of it (same
+  // rule the swap actions enforce server-side).
+  const allWeekDates = [...new Set([...weekGroups.values()].flat())];
+  const blockingEntries = allWeekDates.length
+    ? await prisma.entry.findMany({
+        where: { userId: { in: colleagues.map((c) => c.id) }, date: { in: allWeekDates } },
+        select: { userId: true, date: true },
+      })
+    : [];
+  const blockedByDate = new Map<string, Set<number>>();
+  for (const e of blockingEntries) {
+    if (!blockedByDate.has(e.date)) blockedByDate.set(e.date, new Set());
+    blockedByDate.get(e.date)!.add(e.userId);
+  }
+
   const myWeeks = [...weekGroups.entries()]
     .filter(([, dates]) => dates.every((d) => !requestedDates.has(d)))
     .map(([start, dates]) => ({
       key: start,
       label: `KW ${isoWeekNumber(dates[0])} (${formatDateCH(dates[0])} – ${formatDateCH(dates[dates.length - 1])})`,
       dates,
+      availableColleagueIds: colleagues
+        .map((c) => c.id)
+        .filter((id) => dates.every((d) => !blockedByDate.get(d)?.has(id))),
     }));
 
   const toSwapRow = (r: (typeof pendingSwaps)[number], otherName: string) => ({
@@ -118,9 +141,6 @@ export default async function DashboardPage({
       rows.length > 1 ? `Alle (${rows.map((r) => r.toUser.name).join(", ")})` : rows[0].toUser.name
     )
   );
-  const colleagues = activeUsers
-    .filter((u) => u.id !== userId)
-    .map((u) => ({ id: u.id, name: u.name }));
 
   const data = yearUsers.map((u) => {
     const row: Record<string, string | number> = { name: u.name };
