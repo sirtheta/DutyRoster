@@ -28,6 +28,7 @@ export type UserListItem = Pick<
   | "notifyTelegram"
   | "notifyWeekday"
   | "notifyHour"
+  | "notifyMinute"
   | "telegramChatId"
 >;
 import {
@@ -44,6 +45,8 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
 
 export function UserFormDialog({
   mode,
@@ -200,17 +203,36 @@ export function UserFormDialog({
                 </Select>
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="notifyHour">Uhrzeit (Stunde, 24h)</Label>
-                <Input
-                  id="notifyHour"
-                  name="notifyHour"
-                  type="number"
-                  min={0}
-                  max={23}
-                  defaultValue={user?.notifyHour ?? 7}
-                />
+                <Label htmlFor="notifyHour">Uhrzeit</Label>
+                <div className="flex items-center gap-2">
+                  <Select name="notifyHour" defaultValue={String(user?.notifyHour ?? 7)}>
+                    <SelectTrigger id="notifyHour" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {HOURS.map((h) => (
+                        <SelectItem key={h} value={String(h)}>
+                          {String(h).padStart(2, "0")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span>:</span>
+                  <Select name="notifyMinute" defaultValue={String(user?.notifyMinute ?? 0)}>
+                    <SelectTrigger id="notifyMinute" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MINUTES.map((m) => (
+                        <SelectItem key={m} value={String(m)}>
+                          {String(m).padStart(2, "0")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <span className="text-xs text-muted-foreground">
-                  z. B. 7 = 07:00 Uhr, lokale Zeit (Europe/Zurich)
+                  z. B. 07:00 Uhr
                 </span>
               </div>
               {notifyTelegram && (

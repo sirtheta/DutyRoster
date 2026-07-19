@@ -17,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       notifyTelegram: true,
       notifyWeekday: true,
       notifyHour: true,
+      notifyMinute: true,
       telegramChatId: true,
     },
   });

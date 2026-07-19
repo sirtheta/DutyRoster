@@ -132,7 +132,7 @@ describe("app actions", () => {
     const { updateOwnNotificationSettingsAction } = await import("@/app/(app)/actions");
     const res = await updateOwnNotificationSettingsAction(
       undefined,
-      formData({ notifyEnabled: "on", notifyEmail: "on", notifyWeekday: "2", notifyHour: "9" })
+      formData({ notifyEnabled: "on", notifyEmail: "on", notifyWeekday: "2", notifyHour: "9", notifyMinute: "35" })
     );
 
     expect(res.success).toBe(true);
@@ -140,6 +140,7 @@ describe("app actions", () => {
     expect(updated.notifyEnabled).toBe(true);
     expect(updated.notifyWeekday).toBe(2);
     expect(updated.notifyHour).toBe(9);
+    expect(updated.notifyMinute).toBe(35);
   });
 
   it("updateOwnNotificationSettingsAction requires a Telegram chat id when Telegram is enabled", async () => {

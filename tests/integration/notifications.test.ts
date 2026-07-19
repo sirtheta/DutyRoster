@@ -26,7 +26,7 @@ describe("notifications", () => {
     delete (globalThis as unknown as { notificationSchedulerStarted?: boolean }).notificationSchedulerStarted;
   });
 
-  it("queues a notification only for users due this hour with an S-Dienst this week", async () => {
+  it("queues a notification only for users due this slot with an S-Dienst this week", async () => {
     const { prisma } = db;
     // Monday 2026-03-02, 07:00 Europe/Zurich (CET) — expressed as a fixed
     // instant so the test passes regardless of the runner's own timezone.
@@ -57,7 +57,7 @@ describe("notifications", () => {
     expect(pending).toHaveLength(1);
     expect(pending[0].userId).toBe(dueUser.id);
 
-    // Running again the same hour does not double-queue.
+    // Running again the same slot does not double-queue.
     const queuedAgain = await queueDueNotifications(prisma, now);
     expect(queuedAgain).toBe(0);
   });
@@ -72,6 +72,19 @@ describe("notifications", () => {
     // 06:00 UTC = 07:00 Zurich — due. 07:00 UTC = 08:00 Zurich — not due.
     expect(await queueDueNotifications(prisma, new Date("2026-03-02T07:00:00Z"))).toBe(0);
     expect(await queueDueNotifications(prisma, new Date("2026-03-02T06:00:00Z"))).toBe(1);
+  });
+
+  it("matches notifyMinute at 5-minute precision", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({
+      data: createTestUser({ notifyEnabled: true, notifyWeekday: 1, notifyHour: 7, notifyMinute: 35 }),
+    });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-03-03", type: "S" } });
+
+    // 07:30 and 07:40 Zurich are not due; only 07:35 is.
+    expect(await queueDueNotifications(prisma, new Date("2026-03-02T06:30:00Z"))).toBe(0);
+    expect(await queueDueNotifications(prisma, new Date("2026-03-02T06:40:00Z"))).toBe(0);
+    expect(await queueDueNotifications(prisma, new Date("2026-03-02T06:35:00Z"))).toBe(1);
   });
 
   it("does not queue a due user without an S-Dienst this week", async () => {
@@ -268,7 +281,7 @@ describe("notifications", () => {
     expect(cron.schedule).not.toHaveBeenCalled();
   });
 
-  it("registers an hourly cron job that runs the notification pipeline once", async () => {
+  it("registers a cron job that runs the notification pipeline once", async () => {
     const { startNotificationScheduler } = await import("@/lib/notifications");
 
     startNotificationScheduler();

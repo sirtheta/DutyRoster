@@ -26,6 +26,13 @@ const userSchema = z
     notifyTelegram: z.coerce.boolean().default(false),
     notifyWeekday: z.coerce.number().int().min(0).max(6).default(1),
     notifyHour: z.coerce.number().int().min(0).max(23).default(7),
+    notifyMinute: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(59)
+      .multipleOf(5)
+      .default(0),
     telegramChatId: z.string().optional(),
   })
   .refine((data) => !data.notifyEnabled || data.notifyEmail || data.notifyTelegram, {
@@ -48,6 +55,7 @@ function readUserFields(formData: FormData) {
     notifyTelegram: formData.get("notifyTelegram") === "on",
     notifyWeekday: formData.get("notifyWeekday"),
     notifyHour: formData.get("notifyHour"),
+    notifyMinute: formData.get("notifyMinute"),
     telegramChatId: formData.get("telegramChatId") || undefined,
   };
 }

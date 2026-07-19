@@ -39,6 +39,7 @@ export default async function UsersPage({
       notifyTelegram: true,
       notifyWeekday: true,
       notifyHour: true,
+      notifyMinute: true,
       telegramChatId: true,
     },
   });
@@ -89,7 +90,7 @@ export default async function UsersPage({
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {u.notifyEnabled
-                  ? `${[u.notifyEmail && "E-Mail", u.notifyTelegram && "Telegram"].filter(Boolean).join(", ")} · Wochentag ${u.notifyWeekday}, ${u.notifyHour}:00`
+                  ? `${[u.notifyEmail && "E-Mail", u.notifyTelegram && "Telegram"].filter(Boolean).join(", ")} · Wochentag ${u.notifyWeekday}, ${u.notifyHour}:${String(u.notifyMinute).padStart(2, "0")}`
                   : "—"}
               </TableCell>
               <TableCell className="text-right">

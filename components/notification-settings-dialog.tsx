@@ -21,6 +21,8 @@ import { HelpDialog } from "@/components/ui/help-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
 
 export type OwnNotificationSettings = {
   notifyEnabled: boolean;
@@ -28,6 +30,7 @@ export type OwnNotificationSettings = {
   notifyTelegram: boolean;
   notifyWeekday: number;
   notifyHour: number;
+  notifyMinute: number;
   telegramChatId: string | null;
 };
 
@@ -50,6 +53,8 @@ export function NotificationSettingsDialog({
   const [notifyEmail, setNotifyEmail] = useState(settings.notifyEmail);
   const [notifyTelegram, setNotifyTelegram] = useState(settings.notifyTelegram);
   const [notifyWeekday, setNotifyWeekday] = useState(String(settings.notifyWeekday));
+  const [notifyHour, setNotifyHour] = useState(String(settings.notifyHour));
+  const [notifyMinute, setNotifyMinute] = useState(String(settings.notifyMinute));
   const [telegramChatId, setTelegramChatId] = useState(settings.telegramChatId ?? "");
   const [state, formAction, pending] = useActionState(updateOwnNotificationSettingsAction, undefined);
   const [testPending, startTest] = useTransition();
@@ -138,17 +143,36 @@ export function NotificationSettingsDialog({
               </Select>
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="notifyHour">Uhrzeit (Stunde, 24h)</Label>
-              <Input
-                id="notifyHour"
-                name="notifyHour"
-                type="number"
-                min={0}
-                max={23}
-                defaultValue={settings.notifyHour}
-              />
+              <Label htmlFor="notifyHour">Uhrzeit</Label>
+              <div className="flex items-center gap-2">
+                <Select name="notifyHour" value={notifyHour} onValueChange={setNotifyHour}>
+                  <SelectTrigger id="notifyHour" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HOURS.map((h) => (
+                      <SelectItem key={h} value={String(h)}>
+                        {String(h).padStart(2, "0")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span>:</span>
+                <Select name="notifyMinute" value={notifyMinute} onValueChange={setNotifyMinute}>
+                  <SelectTrigger id="notifyMinute" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MINUTES.map((m) => (
+                      <SelectItem key={m} value={String(m)}>
+                        {String(m).padStart(2, "0")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <span className="text-xs text-muted-foreground">
-                z. B. 7 = 07:00 Uhr, lokale Zeit (Europe/Zurich)
+                z. B. 07:00 Uhr
               </span>
             </div>
             {notifyTelegram && (

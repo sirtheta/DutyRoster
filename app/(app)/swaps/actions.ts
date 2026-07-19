@@ -32,7 +32,7 @@ const createSchema = z.object({
 /**
  * Queues a transactional notification (independent of the user's weekly
  * reminder opt-in) and tries to send it right away; failures stay in the
- * queue for the hourly retry.
+ * queue for the next scheduled retry.
  */
 async function notifyUser(userId: number, subject: string, body: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId } });

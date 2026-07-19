@@ -41,6 +41,7 @@ model User {
   notifyTelegram Boolean @default(false)
   notifyWeekday  Int     @default(1) // 0=Sun ... 6=Sat, default Monday
   notifyHour     Int     @default(7) // hour (0-23) in the app timezone (NOTIFY_TIMEZONE, default Europe/Zurich)
+  notifyMinute   Int     @default(0) // minute (0-59, 5-minute steps) in the app timezone
   telegramChatId String?
 
   // Bearer token for the personal iCal feed. Created as 32 random bytes

@@ -60,14 +60,15 @@ describe("date helpers", () => {
   });
 
   it("zonedParts converts an instant into the target timezone", () => {
-    // 06:00 UTC on Monday 2026-03-02 is 07:00 CET in Zurich.
-    const instant = new Date("2026-03-02T06:00:00Z");
+    // 06:35 UTC on Monday 2026-03-02 is 07:35 CET in Zurich.
+    const instant = new Date("2026-03-02T06:35:00Z");
     expect(zonedParts(instant, "Europe/Zurich")).toEqual({
       weekday: 1,
       hour: 7,
+      minute: 35,
       date: "2026-03-02",
     });
-    expect(zonedParts(instant, "UTC")).toEqual({ weekday: 1, hour: 6, date: "2026-03-02" });
+    expect(zonedParts(instant, "UTC")).toEqual({ weekday: 1, hour: 6, minute: 35, date: "2026-03-02" });
   });
 
   it("zonedParts respects DST (Zurich is CEST/+02:00 in summer)", () => {
@@ -75,6 +76,7 @@ describe("date helpers", () => {
     expect(zonedParts(instant, "Europe/Zurich")).toEqual({
       weekday: 1,
       hour: 7,
+      minute: 0,
       date: "2026-07-06",
     });
   });
@@ -85,6 +87,7 @@ describe("date helpers", () => {
     expect(zonedParts(instant, "Europe/Zurich")).toEqual({
       weekday: 1,
       hour: 0,
+      minute: 30,
       date: "2026-03-02",
     });
   });

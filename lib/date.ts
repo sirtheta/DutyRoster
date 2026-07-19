@@ -65,13 +65,14 @@ const WEEKDAY_INDEX: Record<string, number> = {
 };
 
 /**
- * Weekday (0=So … 6=Sa), hour (0–23), and calendar day (`YYYY-MM-DD`) of a
- * moment as seen in an IANA timezone — independent of the server's own TZ.
+ * Weekday (0=So … 6=Sa), hour (0–23), minute (0–59), and calendar day
+ * (`YYYY-MM-DD`) of a moment as seen in an IANA timezone — independent of
+ * the server's own TZ.
  */
 export function zonedParts(
   date: Date,
   timeZone: string
-): { weekday: number; hour: number; date: string } {
+): { weekday: number; hour: number; minute: number; date: string } {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
     hourCycle: "h23",
@@ -79,6 +80,7 @@ export function zonedParts(
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
+    minute: "2-digit",
     weekday: "short",
   }).formatToParts(date);
   const get = (type: Intl.DateTimeFormatPartTypes) =>
@@ -86,6 +88,7 @@ export function zonedParts(
   return {
     weekday: WEEKDAY_INDEX[get("weekday")] ?? 0,
     hour: parseInt(get("hour"), 10),
+    minute: parseInt(get("minute"), 10),
     date: `${get("year")}-${get("month")}-${get("day")}`,
   };
 }

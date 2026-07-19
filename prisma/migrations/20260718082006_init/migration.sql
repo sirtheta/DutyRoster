@@ -13,6 +13,7 @@ CREATE TABLE "User" (
     "notifyTelegram" BOOLEAN NOT NULL DEFAULT false,
     "notifyWeekday" INTEGER NOT NULL DEFAULT 1,
     "notifyHour" INTEGER NOT NULL DEFAULT 7,
+    "notifyMinute" INTEGER NOT NULL DEFAULT 0,
     "telegramChatId" TEXT,
     "icalToken" TEXT NOT NULL,
     "icalIncludeVacation" BOOLEAN NOT NULL DEFAULT true,

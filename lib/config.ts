@@ -17,9 +17,11 @@ export const config = {
     rounds: parseInt(process.env.BCRYPT_ROUNDS ?? "") || 10,
   },
   notifications: {
-    cronSchedule: process.env.NOTIFY_CRON_SCHEDULE || "0 * * * *",
-    // IANA timezone the users' notifyWeekday/notifyHour refer to. Evaluated
-    // via Intl, so it works regardless of the server's own TZ setting.
+    // Runs every 5 minutes so notifyMinute (5-minute steps) can be matched
+    // precisely; queueDueNotifications is cheap when nothing is due.
+    cronSchedule: process.env.NOTIFY_CRON_SCHEDULE || "*/5 * * * *",
+    // IANA timezone the users' notifyWeekday/notifyHour/notifyMinute refer
+    // to. Evaluated via Intl, so it works regardless of the server's own TZ.
     timezone: process.env.NOTIFY_TIMEZONE || "Europe/Zurich",
     // How often a failing notification is retried before it's given up on.
     maxAttempts: envInt(process.env.NOTIFY_MAX_ATTEMPTS, 3),
