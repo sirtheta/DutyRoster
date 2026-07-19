@@ -46,8 +46,9 @@ export async function sendPlanEmail(
   }
   const transporter = buildTransport(settings);
   const fromName = settings.smtpFromName || settings.smtpUser!;
+  const fromAddress = settings.smtpFromAddress || settings.smtpUser!;
   await transporter.sendMail({
-    from: `"${fromName}" <${settings.smtpUser}>`,
+    from: `"${fromName}" <${fromAddress}>`,
     to,
     subject,
     text,

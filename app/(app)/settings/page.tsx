@@ -18,7 +18,14 @@ export default async function SettingsPage() {
   const [settings, failedNotifications] = await Promise.all([
     prisma.systemSettings.findUnique({
       where: { id: 1 },
-      select: { smtpHost: true, smtpPort: true, smtpUser: true, smtpFromName: true, telegramBotToken: true },
+      select: {
+        smtpHost: true,
+        smtpPort: true,
+        smtpUser: true,
+        smtpFromName: true,
+        smtpFromAddress: true,
+        telegramBotToken: true,
+      },
     }),
     prisma.pendingNotification.findMany({
       where: { sentAt: null, failedAt: { not: null } },
@@ -43,6 +50,7 @@ export default async function SettingsPage() {
     smtpPort: settings.smtpPort,
     smtpUser: settings.smtpUser,
     smtpFromName: settings.smtpFromName,
+    smtpFromAddress: settings.smtpFromAddress,
   };
 
   return (

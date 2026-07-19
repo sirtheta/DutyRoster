@@ -15,6 +15,7 @@ function settings(overrides: Partial<SystemSettings> = {}): SystemSettings {
     smtpUser: "user@example.com",
     smtpPassword: "plaintext-password",
     smtpFromName: null,
+    smtpFromAddress: null,
     telegramBotToken: null,
     ...overrides,
   } as SystemSettings;
@@ -59,6 +60,15 @@ describe("sendPlanEmail", () => {
     await sendPlanEmail(settings({ smtpFromName: "Sanitätsplaner" }), "to@example.com", "Subj", "Body");
 
     expect(mockSendMail).toHaveBeenCalledWith(expect.objectContaining({ from: '"Sanitätsplaner" <user@example.com>' }));
+  });
+
+  it("uses the configured smtpFromAddress instead of smtpUser when set", async () => {
+    const { sendPlanEmail } = await import("@/lib/email");
+    await sendPlanEmail(settings({ smtpFromAddress: "sanitaet@example.com" }), "to@example.com", "Subj", "Body");
+
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: '"user@example.com" <sanitaet@example.com>' })
+    );
   });
 
   it("marks the connection secure for port 465", async () => {

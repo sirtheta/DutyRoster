@@ -60,6 +60,7 @@ describe("settings actions", () => {
         smtpPort: "587",
         smtpUser: "user@example.com",
         smtpPassword: "hunter2",
+        smtpFromAddress: "sanitaet@example.com",
         telegramBotToken: "bot-token",
       })
     );
@@ -67,6 +68,7 @@ describe("settings actions", () => {
     expect(res.success).toBe(true);
     const settings = await db.prisma.systemSettings.findUniqueOrThrow({ where: { id: 1 } });
     expect(settings.smtpHost).toBe("smtp.example.com");
+    expect(settings.smtpFromAddress).toBe("sanitaet@example.com");
     expect(settings.smtpPassword).not.toBe("hunter2");
     expect(settings.smtpPassword).toMatch(/^enc:v1:/);
     expect(settings.telegramBotToken).toMatch(/^enc:v1:/);
