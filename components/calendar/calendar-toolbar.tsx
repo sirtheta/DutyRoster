@@ -53,7 +53,7 @@ export function CalendarToolbar({
       </span>
       {displaySize === 0 && activeTool === null && (
         <span className="text-xs text-muted-foreground">
-          Tipp: Shift + Ziehen markiert mehrere Zellen, auch ab einem belegten Tag.
+          Tipp: Shift + Ziehen markiert mehrere Zellen.
         </span>
       )}
       <div className="flex flex-wrap items-center gap-2">
