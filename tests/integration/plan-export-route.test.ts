@@ -28,14 +28,15 @@ describe("GET /api/plan/[year]/export", () => {
     vi.clearAllMocks();
   });
 
-  it("redirects a Viewer away (Editor/Admin only)", async () => {
+  it("allows a Viewer to export (read-only, any active role)", async () => {
     const user = await db.prisma.user.create({ data: createTestUser({ role: "Viewer" }) });
     currentSession = sessionFor(user.id, "Viewer");
 
     const { GET } = await import("@/app/api/plan/[year]/export/route");
-    await expect(GET(request(), { params: Promise.resolve({ year: "2026" }) })).rejects.toThrow(
-      "REDIRECT:/calendar"
-    );
+    const res = await GET(request(), { params: Promise.resolve({ year: "2026" }) });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("spreadsheetml");
   });
 
   it("returns 400 for a non-numeric year", async () => {

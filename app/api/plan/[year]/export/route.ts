@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireEditor } from "@/lib/permissions";
+import { requireSession } from "@/lib/permissions";
 import { rosterForYearWhere } from "@/lib/users";
 import { datesOfYear, weekdayAbbr, isWeekend } from "@/lib/date";
 import { TYPE_INFO } from "@/lib/entry-types";
@@ -15,7 +15,7 @@ const NAME_COLUMN_WIDTH = 22;
 const DAY_COLUMN_WIDTH = 3;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ year: string }> }) {
-  await requireEditor();
+  await requireSession();
   const { year: yearParam } = await params;
   const year = parseInt(yearParam, 10);
   if (!Number.isInteger(year)) {
