@@ -76,6 +76,18 @@ describe("settings actions", () => {
     expect(audit.action).toBe("SETTINGS");
   });
 
+  it("clears a previously set smtpFromAddress when the field is submitted blank", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+    await db.prisma.systemSettings.create({ data: { id: 1, smtpFromAddress: "sanitaet@example.com" } });
+
+    const { updateSettingsAction } = await import("@/app/(app)/settings/actions");
+    await updateSettingsAction(undefined, formData({ smtpHost: "smtp.example.com", smtpFromAddress: "" }));
+
+    const settings = await db.prisma.systemSettings.findUniqueOrThrow({ where: { id: 1 } });
+    expect(settings.smtpFromAddress).toBeNull();
+  });
+
   it("leaves an existing telegramBotToken untouched when the field is left blank", async () => {
     const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
     currentSession = sessionFor(admin.id, "Admin");

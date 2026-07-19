@@ -36,6 +36,9 @@ export async function updateSettingsAction(
 
   const smtpPassword = formData.get("smtpPassword");
   const data: Record<string, unknown> = { ...parsed.data };
+  // Unlike secrets, a blank field here means "clear it", not "keep the stored value" —
+  // zod turns "" into undefined, which Prisma silently ignores on update, so coerce explicitly.
+  data.smtpFromAddress = parsed.data.smtpFromAddress ?? null;
   if (typeof smtpPassword === "string" && smtpPassword.length > 0) {
     data.smtpPassword = encryptSecret(smtpPassword);
   }
