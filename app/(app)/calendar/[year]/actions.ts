@@ -228,11 +228,6 @@ export async function moveEntryAction(rawInput: {
   const parsedInput = moveSchema.safeParse(rawInput);
   if (!parsedInput.success) return { error: "Ungültige Eingabe." };
   const input = parsedInput.data;
-  // No ownership gate here: the check below rejects anything but an S-Dienst
-  // source, so this action can never touch another entry type.
-  if (isWeekend(input.toDate)) {
-    return { error: "Kein Dienst an Wochenenden." };
-  }
 
   let sourceId: number;
   try {
@@ -244,8 +239,17 @@ export async function moveEntryAction(rawInput: {
       const source = await tx.entry.findUnique({
         where: { userId_date: { userId: input.fromUserId, date: input.fromDate } },
       });
-      if (!source || source.type !== "S") {
-        throw new Error("Nur S-Dienste können verschoben werden.");
+      if (!source) {
+        throw new Error("Quellzelle ist leer.");
+      }
+      // Cross-user moves are only ever valid for S-Dienst entries (the
+      // shared duty roster) — every other type stays own-user-only, same as
+      // a direct edit would be.
+      const isDienstOp = source.type === "S";
+      assertEntryPermission(session.user.role, session.user.id, input.fromUserId, isDienstOp);
+      assertEntryPermission(session.user.role, session.user.id, input.toUserId, isDienstOp);
+      if (isDienstOp && isWeekend(input.toDate)) {
+        throw new Error("Kein Dienst an Wochenenden.");
       }
 
       const destExisting = await tx.entry.findUnique({
@@ -260,7 +264,7 @@ export async function moveEntryAction(rawInput: {
         data: {
           userId: input.toUserId,
           date: input.toDate,
-          type: "S",
+          type: source.type,
           source: "Swap",
           comment: source.comment,
         },
@@ -296,14 +300,6 @@ export async function moveEntriesAction(
   const moves = parsedMoves.data;
   if (moves.length === 0) return { count: 0 };
 
-  // No ownership gate here: the check below rejects any batch containing a
-  // non-S-Dienst source, so this action can never touch another entry type.
-  for (const m of moves) {
-    if (isWeekend(m.toDate)) {
-      return { error: "Kein Dienst an Wochenenden." };
-    }
-  }
-
   const targetKeys = new Set(moves.map((m) => `${m.toUserId}-${m.toDate}`));
   if (targetKeys.size !== moves.length) {
     return { error: "Mehrere Dienste können nicht auf dieselbe Zielzelle verschoben werden." };
@@ -324,8 +320,17 @@ export async function moveEntriesAction(
       const sourceMap = new Map(sources.map((s) => [`${s.userId}-${s.date}`, s]));
       for (const m of moves) {
         const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`);
-        if (!s || s.type !== "S") {
-          throw new Error("Nur S-Dienste können verschoben werden.");
+        if (!s) {
+          throw new Error("Quellzelle ist leer.");
+        }
+        // Cross-user moves are only ever valid for S-Dienst entries (the
+        // shared duty roster) — every other type stays own-user-only, same
+        // as a direct edit would be.
+        const isDienstOp = s.type === "S";
+        assertEntryPermission(session.user.role, session.user.id, m.fromUserId, isDienstOp);
+        assertEntryPermission(session.user.role, session.user.id, m.toUserId, isDienstOp);
+        if (isDienstOp && isWeekend(m.toDate)) {
+          throw new Error("Kein Dienst an Wochenenden.");
         }
       }
 
@@ -351,7 +356,7 @@ export async function moveEntriesAction(
       for (const m of moves) {
         const s = sourceMap.get(`${m.fromUserId}-${m.fromDate}`)!;
         await tx.entry.create({
-          data: { userId: m.toUserId, date: m.toDate, type: "S", source: "Swap", comment: s.comment },
+          data: { userId: m.toUserId, date: m.toDate, type: s.type, source: "Swap", comment: s.comment },
         });
       }
     });

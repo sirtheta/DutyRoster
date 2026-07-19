@@ -370,7 +370,41 @@ describe("calendar actions", () => {
       { fromUserId: other.id, fromDate: "2026-06-01", toUserId: other.id, toDate: "2026-06-08" },
     ]);
 
-    expect(res.error).toMatch(/Nur S-Dienste/);
+    expect(res.error).toMatch(/Keine Berechtigung/);
+  });
+
+  it("lets an editor move their own non-Dienst entry, including onto a weekend", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-06-01", type: "F" } });
+    currentSession = sessionFor(user.id, "Editor");
+
+    const { moveEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    // 2026-06-06 is a Saturday — fine for Ferien, only S-Dienst is weekend-restricted.
+    const res = await moveEntriesAction([
+      { fromUserId: user.id, fromDate: "2026-06-01", toUserId: user.id, toDate: "2026-06-06" },
+    ]);
+
+    expect(res.error).toBeUndefined();
+    const moved = await prisma.entry.findUniqueOrThrow({
+      where: { userId_date: { userId: user.id, date: "2026-06-06" } },
+    });
+    expect(moved.type).toBe("F");
+  });
+
+  it("rejects an editor moving their own non-Dienst entry onto another user's row", async () => {
+    const { prisma } = db;
+    const editor = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Editor" }) });
+    const other = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Editor" }) });
+    await prisma.entry.create({ data: { userId: editor.id, date: "2026-06-01", type: "F" } });
+    currentSession = sessionFor(editor.id, "Editor");
+
+    const { moveEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await moveEntriesAction([
+      { fromUserId: editor.id, fromDate: "2026-06-01", toUserId: other.id, toDate: "2026-06-08" },
+    ]);
+
+    expect(res.error).toMatch(/Keine Berechtigung/);
   });
 
   it("generates S-duty entries for a year and logs one AUTOMATIC entry", async () => {

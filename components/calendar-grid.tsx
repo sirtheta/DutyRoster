@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { EntryType, UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { TYPE_INFO } from "@/lib/entry-types";
 import { datesOfYear, formatDateCH, isWeekend, toDateString, weekdayAbbr } from "@/lib/date";
 import { bulkSetEntriesAction, moveEntryAction, moveEntriesAction } from "@/app/(app)/calendar/[year]/actions";
@@ -42,6 +44,11 @@ export function CalendarGrid({
   const gridRef = useRef<HTMLDivElement>(null);
   const mobileGridRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  // Each month's own scroll container, keyed by month index, so the arrow
+  // buttons below can scroll it directly — swiping alone isn't reliable on
+  // mobile when every cell in view is occupied (see touch-none on data
+  // cells: touch drag needs the whole cell, leaving no swipeable gap).
+  const monthScrollRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   // Set right before a drag starts so the click that follows pointerup
   // (browsers fire it regardless of what pointer events did) doesn't also
   // toggle the drop-target cell's selection.
@@ -103,9 +110,23 @@ export function CalendarGrid({
     setSelection(new Set());
   }
 
+  // Label for the moved-entry toast, singular/plural per type — "S" keeps
+  // the familiar "Dienst(e)" wording, other types use their TYPE_INFO label
+  // as-is (they read fine uninflected in German: "3 Ferien verschoben.").
+  function moveToastLabel(type: EntryType | undefined, count: number) {
+    if (!type) return count === 1 ? "Eintrag" : "Einträge";
+    if (type === "S") return count === 1 ? "Dienst" : "Dienste";
+    return TYPE_INFO[type].label;
+  }
+
   // Executes the moves computed by a finished drag; on success the selection
   // follows the cells to their new spot when the drag grabbed the selection.
   function performMoves(moves: Move[], keepSelection: boolean) {
+    // Read the moved entries' type(s) before the action runs — entryMap
+    // still reflects the pre-move state at this point.
+    const movedTypes = new Set(moves.map((m) => entryMap.get(`${m.fromUserId}-${m.fromDate}`)?.type));
+    const uniformType = movedTypes.size === 1 ? [...movedTypes][0] : undefined;
+
     startTransition(async () => {
       const movedSelection = keepSelection
         ? new Set(moves.map((m) => cellKey(m.toUserId, m.toDate)))
@@ -114,7 +135,7 @@ export function CalendarGrid({
         const res = await moveEntryAction(moves[0]);
         if (res.error) toast.error(res.error);
         else {
-          toast.success("Dienst verschoben.");
+          toast.success(`${moveToastLabel(uniformType, 1)} verschoben.`);
           if (movedSelection) setSelection(movedSelection);
           router.refresh();
         }
@@ -122,7 +143,8 @@ export function CalendarGrid({
         const res = await moveEntriesAction(moves);
         if (res.error) toast.error(res.error);
         else {
-          toast.success(`${res.count ?? moves.length} Dienste verschoben.`);
+          const count = res.count ?? moves.length;
+          toast.success(`${count} ${moveToastLabel(uniformType, count)} verschoben.`);
           if (movedSelection) setSelection(movedSelection);
           router.refresh();
         }
@@ -211,6 +233,11 @@ export function CalendarGrid({
       return;
     }
     setActiveTool((prev) => (prev === type ? null : type));
+  }
+
+  function scrollMonth(month: number, direction: -1 | 1) {
+    const el = monthScrollRefs.current.get(month);
+    el?.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: "smooth" });
   }
 
   function handleDeleteToolClick() {
@@ -337,7 +364,10 @@ export function CalendarGrid({
       <td
         key={d}
         className={cn(
-          "h-7 min-w-[1.75rem] border-b border-l p-0 text-center align-middle",
+          // Without this, a long-press on the type letter (S/F/...) selects
+          // it as text and, on mobile, pops the copy/cut context menu instead
+          // of starting the drag.
+          "h-7 min-w-[1.75rem] select-none border-b border-l p-0 text-center align-middle [-webkit-touch-callout:none]",
           editable && "cursor-pointer hover:opacity-80",
           // Touch browsers decide whether a touch will pan/scroll the page
           // right at touchstart, based on this CSS — not on anything our JS
@@ -457,10 +487,44 @@ export function CalendarGrid({
       <div ref={mobileGridRef} className="flex flex-col gap-6 md:hidden">
         {months.map((m) => (
           <div key={m.month}>
-            <h3 className="mb-2 text-sm font-semibold">
-              {MONTH_NAMES[m.month]} {year}
-            </h3>
-            <div className="overflow-x-auto rounded-md border">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">
+                {MONTH_NAMES[m.month]} {year}
+              </h3>
+              {/* Swiping alone can't reliably scroll this table once every
+                  cell is occupied (touch-none on data cells claims the whole
+                  touch for long-press-drag), so these buttons give mobile
+                  users a way to scroll that never depends on cell content. */}
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  aria-label={`${MONTH_NAMES[m.month]} nach links scrollen`}
+                  onClick={() => scrollMonth(m.month, -1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  aria-label={`${MONTH_NAMES[m.month]} nach rechts scrollen`}
+                  onClick={() => scrollMonth(m.month, 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div
+              ref={(el) => {
+                if (el) monthScrollRefs.current.set(m.month, el);
+                else monthScrollRefs.current.delete(m.month);
+              }}
+              className="overflow-x-auto rounded-md border"
+            >
               <table className="border-collapse text-xs">
                 <thead>
                   <tr>
