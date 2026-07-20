@@ -48,16 +48,13 @@ export function CalendarToolbar({
           : activeTool === "DELETE"
             ? "Zellen anklicken zum Löschen"
             : activeTool !== null
-              ? "Zellen anklicken zum Einfärben"
+              ? `Zellen anklicken zum Einfärben: ${TYPE_INFO[activeTool].label}`
               : "Legende"}
       </span>
-      <span
-        className="text-xs text-muted-foreground"
-        style={displaySize === 0 && activeTool === null ? undefined : { visibility: "hidden" }}
-      >
+      <span className="hidden text-xs text-muted-foreground sm:block">
         Tipp: Shift + Ziehen markiert mehrere Zellen.
       </span>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible">
         {ENTRY_TYPES.map((type) => {
           const active = activeTool === type;
           return (
@@ -65,6 +62,7 @@ export function CalendarToolbar({
               key={type}
               variant="outline"
               size="sm"
+              className="shrink-0"
               disabled={isPending || (type === "S" && hasWeekendSelected)}
               onClick={() => onCategoryClick(type)}
               style={
@@ -76,9 +74,14 @@ export function CalendarToolbar({
                     }
                   : { borderColor: TYPE_INFO[type].color, color: TYPE_INFO[type].color }
               }
-              title={type === "S" && hasWeekendSelected ? "Kein Dienst an Wochenenden." : undefined}
+              title={
+                type === "S" && hasWeekendSelected
+                  ? "Kein Dienst an Wochenenden."
+                  : `${type} – ${TYPE_INFO[type].label}`
+              }
             >
-              {type} – {TYPE_INFO[type].label}
+              {type}
+              <span className="hidden sm:inline"> – {TYPE_INFO[type].label}</span>
             </Button>
           );
         })}
