@@ -2,6 +2,7 @@
   "name": "duty-roster",
   "version": "0.4.8",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

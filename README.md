@@ -1,6 +1,7 @@
 # Sanitätsplaner
 
 [![Web CI/CD](https://github.com/sirtheta/DutyRoster/actions/workflows/web.yml/badge.svg)](https://github.com/sirtheta/DutyRoster/actions/workflows/web.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
 Ein Dienstplanungstool für das Sanitätsteam eines Unternehmens. Die Anwendung verwaltet Jahreskalender mit Diensten, Abwesenheiten und einer automatischen Rotation der Dienstzuteilung.
 
@@ -102,4 +103,4 @@ Die Anwendung erstellt jede Nacht (Standard: 02:30) eine konsistente Kopie der S
 
 ## Lizenz
 
-Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
+Dieses Projekt steht unter der [GNU AGPL-3.0](LICENSE).
