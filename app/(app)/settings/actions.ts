@@ -9,6 +9,9 @@ import { logAudit } from "@/lib/audit";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { queueDueNotifications, dispatchPendingNotifications } from "@/lib/notifications";
 import { verifyTelegramBotToken } from "@/lib/telegram";
+import logger from "@/lib/logger";
+
+const log = logger.child({ module: "settings" });
 
 const settingsSchema = z.object({
   smtpHost: z.string().optional(),
@@ -101,6 +104,7 @@ export async function testSmtpConnectionAction(
     await transporter.verify();
     return { success: true };
   } catch (err) {
+    log.error({ err, host, port }, "SMTP connection test failed");
     return { error: err instanceof Error ? err.message : "Verbindung fehlgeschlagen." };
   }
 }
@@ -130,6 +134,7 @@ export async function testTelegramConnectionAction(
     const { username } = await verifyTelegramBotToken(token);
     return { success: true, botUsername: username };
   } catch (err) {
+    log.error({ err }, "Telegram connection test failed");
     return { error: err instanceof Error ? err.message : "Verbindung fehlgeschlagen." };
   }
 }
@@ -157,6 +162,7 @@ export async function retryFailedNotificationsAction(): Promise<{
     revalidatePath("/settings");
     return { count };
   } catch (err) {
+    log.error({ err }, "Failed to retry failed notifications");
     return { error: err instanceof Error ? err.message : "Unbekannter Fehler" };
   }
 }
@@ -174,6 +180,7 @@ export async function triggerNotificationCheck(): Promise<{ error?: string; succ
     revalidatePath("/settings");
     return { success: true, queued };
   } catch (err) {
+    log.error({ err }, "Failed to trigger notification check");
     return { error: err instanceof Error ? err.message : "Unbekannter Fehler" };
   }
 }

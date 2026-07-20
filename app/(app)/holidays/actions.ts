@@ -2,11 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { importHolidaysForYear } from "@/lib/holidays";
 import { addDays } from "@/lib/date";
+import logger from "@/lib/logger";
+
+const log = logger.child({ module: "holidays" });
 
 const holidaySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -29,8 +33,12 @@ export async function createHolidayAction(
       data: { ...parsed.data, year: parseInt(parsed.data.date.slice(0, 4), 10) },
     });
     await logAudit(session, "CREATE", "Holiday", holiday.id, parsed.data);
-  } catch {
-    return { error: "Dieser Feiertag existiert bereits." };
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { error: "Dieser Feiertag existiert bereits." };
+    }
+    log.error({ err }, "Failed to create holiday");
+    return { error: "Feiertag konnte nicht erstellt werden." };
   }
 
   revalidatePath("/holidays");
@@ -66,8 +74,13 @@ export async function createHolidayRangeAction(
         data: { date, name, year: parseInt(date.slice(0, 4), 10) },
       });
       count++;
-    } catch {
-      // unique constraint (date, canton) — already a holiday on this day, skip
+    } catch (err) {
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")) {
+        // Not the expected "already a holiday on this day" case — don't
+        // silently under-report the range, surface it instead of continuing.
+        log.error({ err, date }, "Failed to create holiday in range");
+        return { error: "Feiertage konnten nicht vollständig erstellt werden." };
+      }
     }
     date = addDays(date, 1);
   }

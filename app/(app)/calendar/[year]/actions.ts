@@ -10,6 +10,9 @@ import { runRotation } from "@/lib/rotation";
 import { holidaySetForYear } from "@/lib/holidays";
 import { isWeekend, parseDate, toDateString } from "@/lib/date";
 import { notifyCalendarChange } from "@/lib/calendar-events";
+import logger from "@/lib/logger";
+
+const log = logger.child({ module: "calendar" });
 
 export type Assignment = { date: string; userId: number };
 
@@ -276,6 +279,7 @@ export async function moveEntryAction(rawInput: {
       return { error: "Zielzelle ist bereits belegt." };
     }
     if (err instanceof Error) return { error: err.message };
+    log.error({ err, input }, "Unexpected error moving entry");
     throw err;
   }
 
@@ -365,6 +369,7 @@ export async function moveEntriesAction(
       return { error: "Zielzelle ist bereits belegt." };
     }
     if (err instanceof Error) return { error: err.message };
+    log.error({ err, moveCount: moves.length }, "Unexpected error moving entries");
     throw err;
   }
 
