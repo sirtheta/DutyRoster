@@ -12,6 +12,9 @@ import { bcryptRounds } from "@/lib/password";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
 import prisma from "@/lib/prisma";
+import logger from "@/lib/logger";
+
+const log = logger.child({ module: "account" });
 
 const notificationSettingsSchema = z.object({
   notifyEnabled: z.coerce.boolean().default(false),
@@ -162,6 +165,7 @@ export async function sendTestNotificationAction(
       await sendTelegramMessage(settings, telegramChatId, body);
     }
   } catch (err) {
+    log.error({ err, userId, channel }, "Failed to send test notification");
     return { error: err instanceof Error ? err.message : "Versand fehlgeschlagen." };
   }
 

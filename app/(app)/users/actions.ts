@@ -8,12 +8,15 @@ import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { bcryptRounds } from "@/lib/password";
-import { UserRole, NotifyChannel } from "@prisma/client";
+import { Prisma, UserRole, NotifyChannel } from "@prisma/client";
 import { parseDate, toDateString } from "@/lib/date";
 import { notifyCalendarChange } from "@/lib/calendar-events";
 import { generateAutomationAction } from "@/app/(app)/calendar/[year]/actions";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
+import logger from "@/lib/logger";
+
+const log = logger.child({ module: "users" });
 
 const userSchema = z
   .object({
@@ -96,8 +99,12 @@ export async function createUserAction(
       });
     });
     await logAudit(session, "CREATE", "User", user.id, { email: user.email });
-  } catch {
-    return { error: "E-Mail-Adresse wird bereits verwendet." };
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { error: "E-Mail-Adresse wird bereits verwendet." };
+    }
+    log.error({ err }, "Failed to create user");
+    return { error: "Benutzer konnte nicht erstellt werden." };
   }
 
   revalidatePath("/users");
@@ -123,8 +130,12 @@ export async function updateUserAction(
   try {
     await prisma.user.update({ where: { id }, data });
     await logAudit(session, "UPDATE", "User", id, { email: parsed.data.email });
-  } catch {
-    return { error: "E-Mail-Adresse wird bereits verwendet." };
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { error: "E-Mail-Adresse wird bereits verwendet." };
+    }
+    log.error({ err, userId: id }, "Failed to update user");
+    return { error: "Benutzer konnte nicht gespeichert werden." };
   }
 
   revalidatePath("/users");

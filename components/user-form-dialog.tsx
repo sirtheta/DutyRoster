@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { NotifyChannel, User } from "@prisma/client";
 import {
@@ -64,8 +64,16 @@ export function UserFormDialog({
   const action = mode === "create" ? createUserAction : updateUserAction;
   const [state, formAction, pending] = useActionState(action, undefined);
   const formRef = useRef<HTMLFormElement>(null);
+  const wasPending = useRef(false);
   const [testPending, startTest] = useTransition();
   const [testingChannel, setTestingChannel] = useState<NotifyChannel | null>(null);
+
+  // Close only after a submit that actually succeeded — closing unconditionally
+  // hid the server's error message (e.g. duplicate email) before it could be read.
+  useEffect(() => {
+    if (wasPending.current && !pending && !state?.error) setOpen(false);
+    wasPending.current = pending;
+  }, [pending, state]);
 
   function runTest(channel: NotifyChannel) {
     if (!formRef.current) return;
@@ -83,29 +91,13 @@ export function UserFormDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next && !state?.error) {
-          // dialog closed after a successful submit; nothing else to do,
-          // the server action already revalidated the list.
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "Neuer Benutzer" : `Benutzer bearbeiten: ${user?.name}`}</DialogTitle>
         </DialogHeader>
-        <form
-          ref={formRef}
-          action={async (formData) => {
-            await formAction(formData);
-            setOpen(false);
-          }}
-          className="grid grid-cols-2 gap-4"
-        >
+        <form ref={formRef} action={formAction} className="grid grid-cols-2 gap-4">
           {mode === "edit" && <input type="hidden" name="id" value={user?.id} />}
           <div className="col-span-2 flex flex-col gap-2">
             <Label htmlFor="name">Name</Label>
