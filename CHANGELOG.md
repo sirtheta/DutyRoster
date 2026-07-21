@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.9](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.8...DutyRoster-v0.4.9) (2026-07-21)
+
+
+### Bug Fixes
+
+* **calendar:** shrink legend toolbar on mobile ([2b74ee1](https://github.com/sirtheta/DutyRoster/commit/2b74ee130568144847b7e90dc1c37999724a7c40))
+* **logging:** wire the shared logger into remaining server actions ([799565e](https://github.com/sirtheta/DutyRoster/commit/799565e676af61f034a12534774f396c479ba800))
+* **users:** stop hiding real errors when saving a user ([36b1344](https://github.com/sirtheta/DutyRoster/commit/36b13443367f4632a62da280bc96df2d78d6ac94))
+
 ## [0.4.8](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.7...DutyRoster-v0.4.8) (2026-07-19)
 
 
