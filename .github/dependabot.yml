@@ -10,12 +10,12 @@ updates:
         patterns:
           - "react"
           - "react-dom"
+        update-types:
+          - "major"
       eslint:
         patterns:
           - "eslint"
           - "eslint-*"
           - "@typescript-eslint/*"
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
+        update-types:
+          - "major"
