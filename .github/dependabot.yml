@@ -5,9 +5,6 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 50
-    ignore:
-      - dependency-name: "nodemailer"
-        update-types: ["version-update:semver-major"]
     groups:
       react:
         patterns:
