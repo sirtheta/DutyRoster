@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.10](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.9...DutyRoster-v0.4.10) (2026-07-26)
+
+
+### Features
+
+* **auth:** add per-user two-factor authentication with backup codes ([c85c54f](https://github.com/sirtheta/DutyRoster/commit/c85c54f8555ca60fec987a159f63469c1ba1a06c))
+
 ## [0.4.9](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.8...DutyRoster-v0.4.9) (2026-07-21)
 
 
