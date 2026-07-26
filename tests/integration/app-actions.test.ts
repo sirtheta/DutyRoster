@@ -245,4 +245,113 @@ describe("app actions", () => {
 
     expect(res.error).toBe("SMTP down");
   });
+
+  describe("two-factor authentication", () => {
+    it("startTwoFactorSetupAction stores an encrypted pending secret and returns a QR code", async () => {
+      const user = await db.prisma.user.create({ data: createTestUser() });
+      currentSession = sessionFor(user.id, "Editor");
+
+      const { startTwoFactorSetupAction } = await import("@/app/(app)/actions");
+      const res = await startTwoFactorSetupAction();
+
+      expect(res.error).toBeUndefined();
+      expect(res.secret).toMatch(/^[A-Z2-7]+$/);
+      expect(res.qrDataUrl).toMatch(/^data:image\/png;base64,/);
+      const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(updated.twoFactorSecret).toBeTruthy();
+      expect(updated.twoFactorSecret).not.toBe(res.secret); // stored encrypted, not plaintext
+      expect(updated.twoFactorEnabled).toBe(false); // not enabled until confirmed
+    });
+
+    it("confirmTwoFactorSetupAction rejects a wrong code without enabling 2FA", async () => {
+      const user = await db.prisma.user.create({ data: createTestUser() });
+      currentSession = sessionFor(user.id, "Editor");
+
+      const { startTwoFactorSetupAction, confirmTwoFactorSetupAction } = await import("@/app/(app)/actions");
+      await startTwoFactorSetupAction();
+      const res = await confirmTwoFactorSetupAction(undefined, formData({ code: "000000" }));
+
+      expect(res.error).toBe("Ungültiger Code.");
+      const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(updated.twoFactorEnabled).toBe(false);
+    });
+
+    it("confirmTwoFactorSetupAction enables 2FA and issues backup codes on a valid code", async () => {
+      const user = await db.prisma.user.create({ data: createTestUser() });
+      currentSession = sessionFor(user.id, "Editor");
+
+      const { startTwoFactorSetupAction, confirmTwoFactorSetupAction } = await import("@/app/(app)/actions");
+      const { OTP } = await import("otplib");
+      const otp = new OTP({ strategy: "totp" });
+
+      const setup = await startTwoFactorSetupAction();
+      const code = otp.generateSync({ secret: setup.secret! });
+      const res = await confirmTwoFactorSetupAction(undefined, formData({ code }));
+
+      expect(res.success).toBe(true);
+      expect(res.backupCodes).toHaveLength(8);
+      const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(updated.twoFactorEnabled).toBe(true);
+      expect(JSON.parse(updated.twoFactorBackupCodes!)).toHaveLength(8);
+      const audit = await db.prisma.auditLog.findFirstOrThrow({ where: { entityType: "User" } });
+      expect(JSON.parse(audit.details!)).toMatchObject({ action: "enableTwoFactor" });
+    });
+
+    it("disableTwoFactorAction requires the correct current password", async () => {
+      const user = await db.prisma.user.create({
+        data: createTestUser({
+          passwordHash: await hash("realpassword", 4),
+          twoFactorEnabled: true,
+          twoFactorSecret: "irrelevant-in-tests",
+          twoFactorBackupCodes: JSON.stringify(["h1"]),
+        }),
+      });
+      currentSession = sessionFor(user.id, "Editor");
+
+      const { disableTwoFactorAction } = await import("@/app/(app)/actions");
+      const badRes = await disableTwoFactorAction(undefined, formData({ password: "wrongpassword" }));
+      expect(badRes.error).toMatch(/falsch/);
+
+      const goodRes = await disableTwoFactorAction(undefined, formData({ password: "realpassword" }));
+      expect(goodRes.success).toBe(true);
+      const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(updated.twoFactorEnabled).toBe(false);
+      expect(updated.twoFactorSecret).toBeNull();
+      expect(updated.twoFactorBackupCodes).toBeNull();
+    });
+
+    it("regenerateBackupCodesAction replaces backup codes after password confirmation", async () => {
+      const user = await db.prisma.user.create({
+        data: createTestUser({
+          passwordHash: await hash("realpassword", 4),
+          twoFactorEnabled: true,
+          twoFactorSecret: "irrelevant-in-tests",
+          twoFactorBackupCodes: JSON.stringify(["old-hash"]),
+        }),
+      });
+      currentSession = sessionFor(user.id, "Editor");
+
+      const { regenerateBackupCodesAction } = await import("@/app/(app)/actions");
+      const res = await regenerateBackupCodesAction(undefined, formData({ password: "realpassword" }));
+
+      expect(res.success).toBe(true);
+      expect(res.backupCodes).toHaveLength(8);
+      const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      const storedHashes = JSON.parse(updated.twoFactorBackupCodes!);
+      expect(storedHashes).not.toEqual(["old-hash"]);
+      expect(storedHashes).toHaveLength(8);
+    });
+
+    it("regenerateBackupCodesAction rejects when 2FA isn't enabled", async () => {
+      const user = await db.prisma.user.create({
+        data: createTestUser({ passwordHash: await hash("realpassword", 4) }),
+      });
+      currentSession = sessionFor(user.id, "Editor");
+
+      const { regenerateBackupCodesAction } = await import("@/app/(app)/actions");
+      const res = await regenerateBackupCodesAction(undefined, formData({ password: "realpassword" }));
+
+      expect(res.error).toBe("2FA ist nicht aktiviert.");
+    });
+  });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, HelpCircle, KeyRound, LogOut, User as UserIcon } from "lucide-react";
+import { Bell, HelpCircle, KeyRound, LogOut, ShieldCheck, User as UserIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,19 +15,24 @@ import {
   NotificationSettingsDialog,
   type OwnNotificationSettings,
 } from "@/components/notification-settings-dialog";
+import { TwoFactorSettingsDialog } from "@/components/two-factor-settings-dialog";
 import { signOutAction } from "@/app/(app)/actions";
 
 export function UserMenu({
   name,
   email,
   notificationSettings,
+  twoFactorEnabled,
 }: {
   name: string;
   email: string;
   notificationSettings: OwnNotificationSettings;
+  twoFactorEnabled: boolean;
 }) {
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [notificationDialogOpen, setNotificationDialogOpen] = useState(false);
+  const [twoFactorDialogOpen, setTwoFactorDialogOpen] = useState(false);
+  const [twoFactorEnabledState, setTwoFactorEnabledState] = useState(twoFactorEnabled);
 
   const initials = name
     .split(" ")
@@ -61,6 +66,10 @@ export function UserMenu({
           <DropdownMenuItem onSelect={() => setPasswordDialogOpen(true)}>
             <KeyRound className="mr-2 inline h-4 w-4" /> Passwort ändern
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setTwoFactorDialogOpen(true)}>
+            <ShieldCheck className="mr-2 inline h-4 w-4" />
+            Zwei-Faktor-Authentifizierung{twoFactorEnabledState ? " verwalten" : " aktivieren"}
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <a href="/benutzerhandbuch.html" target="_blank" rel="noopener noreferrer">
               <HelpCircle className="mr-2 inline h-4 w-4" /> Benutzerhandbuch
@@ -78,6 +87,13 @@ export function UserMenu({
         open={notificationDialogOpen}
         onOpenChange={setNotificationDialogOpen}
         settings={notificationSettings}
+      />
+      <TwoFactorSettingsDialog
+        key={twoFactorDialogOpen ? "open" : "closed"}
+        open={twoFactorDialogOpen}
+        onOpenChange={setTwoFactorDialogOpen}
+        enabled={twoFactorEnabledState}
+        onEnabledChange={setTwoFactorEnabledState}
       />
     </>
   );

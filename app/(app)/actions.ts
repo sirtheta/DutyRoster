@@ -11,6 +11,14 @@ import { logAudit } from "@/lib/audit";
 import { bcryptRounds } from "@/lib/password";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
+import {
+  generateTwoFactorSecret,
+  generateTwoFactorSetup,
+  encryptTwoFactorSecret,
+  verifyTotpCode,
+} from "@/lib/two-factor";
+import { generateBackupCodes, hashBackupCodes } from "@/lib/backup-codes";
+import { decryptSecret } from "@/lib/crypto";
 import prisma from "@/lib/prisma";
 import logger from "@/lib/logger";
 
@@ -171,4 +179,116 @@ export async function sendTestNotificationAction(
 
   await logAudit(session, "SETTINGS", "User", userId, { action: "testNotification", channel });
   return { success: true };
+}
+
+/**
+ * Starts (or restarts) 2FA setup for the caller: generates a fresh secret,
+ * stores it encrypted right away (twoFactorEnabled stays false until
+ * `confirmTwoFactorSetupAction` verifies a code from it), and returns the QR
+ * code / manual-entry secret for the authenticator app.
+ */
+export async function startTwoFactorSetupAction(): Promise<{
+  error?: string;
+  qrDataUrl?: string;
+  secret?: string;
+}> {
+  const session = await requireSession();
+  const userId = parseInt(session.user.id, 10);
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return { error: "Benutzer nicht gefunden." };
+
+  const secret = generateTwoFactorSecret();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { twoFactorSecret: encryptTwoFactorSecret(secret) },
+  });
+  const { qrDataUrl } = await generateTwoFactorSetup(user.email, secret);
+  return { qrDataUrl, secret };
+}
+
+/**
+ * Confirms 2FA setup with a code generated from the pending secret. On
+ * success, enables 2FA and issues a fresh set of backup codes (shown once).
+ */
+export async function confirmTwoFactorSetupAction(
+  _prevState: { error?: string; success?: boolean; backupCodes?: string[] } | undefined,
+  formData: FormData
+): Promise<{ error?: string; success?: boolean; backupCodes?: string[] }> {
+  const session = await requireSession();
+  const userId = parseInt(session.user.id, 10);
+
+  const code = formData.get("code");
+  if (typeof code !== "string" || !code.trim()) return { error: "Bitte einen Code eingeben." };
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user?.twoFactorSecret) return { error: "Kein 2FA-Setup gestartet." };
+
+  const valid = verifyTotpCode(decryptSecret(user.twoFactorSecret), code);
+  if (!valid) return { error: "Ungültiger Code." };
+
+  const backupCodes = generateBackupCodes();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { twoFactorEnabled: true, twoFactorBackupCodes: JSON.stringify(hashBackupCodes(backupCodes)) },
+  });
+  await logAudit(session, "UPDATE", "User", userId, { action: "enableTwoFactor" });
+  revalidatePath("/", "layout");
+  return { success: true, backupCodes };
+}
+
+/**
+ * Disables 2FA for the caller. Requires the current password (not a 2FA
+ * code) so it still works if the authenticator device/app was lost.
+ */
+export async function disableTwoFactorAction(
+  _prevState: { error?: string; success?: boolean } | undefined,
+  formData: FormData
+): Promise<{ error?: string; success?: boolean }> {
+  const session = await requireSession();
+  const userId = parseInt(session.user.id, 10);
+
+  const password = formData.get("password");
+  if (typeof password !== "string") return { error: "Ungültige Eingabe." };
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !(await compare(password, user.passwordHash))) {
+    return { error: "Passwort ist falsch." };
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorBackupCodes: null },
+  });
+  await logAudit(session, "UPDATE", "User", userId, { action: "disableTwoFactor" });
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
+/**
+ * Regenerates the caller's backup codes, invalidating all previous ones.
+ * Requires the current password, same rationale as disabling.
+ */
+export async function regenerateBackupCodesAction(
+  _prevState: { error?: string; success?: boolean; backupCodes?: string[] } | undefined,
+  formData: FormData
+): Promise<{ error?: string; success?: boolean; backupCodes?: string[] }> {
+  const session = await requireSession();
+  const userId = parseInt(session.user.id, 10);
+
+  const password = formData.get("password");
+  if (typeof password !== "string") return { error: "Ungültige Eingabe." };
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !(await compare(password, user.passwordHash))) {
+    return { error: "Passwort ist falsch." };
+  }
+  if (!user.twoFactorEnabled) return { error: "2FA ist nicht aktiviert." };
+
+  const backupCodes = generateBackupCodes();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { twoFactorBackupCodes: JSON.stringify(hashBackupCodes(backupCodes)) },
+  });
+  await logAudit(session, "UPDATE", "User", userId, { action: "regenerateBackupCodes" });
+  return { success: true, backupCodes };
 }

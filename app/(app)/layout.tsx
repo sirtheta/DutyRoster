@@ -19,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       notifyHour: true,
       notifyMinute: true,
       telegramChatId: true,
+      twoFactorEnabled: true,
     },
   });
 
@@ -44,6 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               name={session.user.name ?? ""}
               email={session.user.email ?? ""}
               notificationSettings={ownUser}
+              twoFactorEnabled={ownUser.twoFactorEnabled}
             />
           </div>
         </div>

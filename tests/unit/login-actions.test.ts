@@ -27,6 +27,21 @@ describe("loginAction", () => {
     expect(mockSignIn).toHaveBeenCalledWith("credentials", {
       email: "a@example.com",
       password: "hunter2",
+      code: undefined,
+      redirectTo: "/calendar",
+    });
+  });
+
+  it("passes the 2FA code along when present", async () => {
+    mockSignIn.mockResolvedValue(undefined);
+    const { loginAction } = await import("@/app/(auth)/login/actions");
+
+    await loginAction(undefined, formData({ email: "a@example.com", password: "hunter2", code: "123456" }));
+
+    expect(mockSignIn).toHaveBeenCalledWith("credentials", {
+      email: "a@example.com",
+      password: "hunter2",
+      code: "123456",
       redirectTo: "/calendar",
     });
   });
@@ -38,6 +53,32 @@ describe("loginAction", () => {
     const res = await loginAction(undefined, formData({ email: "a@example.com", password: "wrong" }));
 
     expect(res.error).toBe("E-Mail oder Passwort ist falsch.");
+    expect(res.twoFactorRequired).toBeUndefined();
+  });
+
+  it("flags twoFactorRequired without an error when the account has 2FA enabled", async () => {
+    const err = new MockAuthError("CredentialsSignin") as MockAuthError & { code: string };
+    err.code = "two_factor_required";
+    mockSignIn.mockRejectedValue(err);
+    const { loginAction } = await import("@/app/(auth)/login/actions");
+
+    const res = await loginAction(undefined, formData({ email: "a@example.com", password: "correct" }));
+
+    expect(res).toEqual({ twoFactorRequired: true });
+  });
+
+  it("flags twoFactorRequired with an error when the 2FA code is wrong", async () => {
+    const err = new MockAuthError("CredentialsSignin") as MockAuthError & { code: string };
+    err.code = "two_factor_invalid";
+    mockSignIn.mockRejectedValue(err);
+    const { loginAction } = await import("@/app/(auth)/login/actions");
+
+    const res = await loginAction(
+      undefined,
+      formData({ email: "a@example.com", password: "correct", code: "000000" })
+    );
+
+    expect(res).toEqual({ twoFactorRequired: true, error: "Ungültiger Code." });
   });
 
   it("rethrows non-AuthError errors (e.g. NEXT_REDIRECT)", async () => {

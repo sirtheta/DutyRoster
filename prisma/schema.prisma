@@ -33,6 +33,17 @@ model User {
   // Order in the yearly rotation automation (lower = earlier)
   rotationOrder Int      @default(0)
 
+  // Two-factor authentication (TOTP)
+  twoFactorEnabled Boolean @default(false)
+  // AES-encrypted (lib/crypto.ts) base32 TOTP secret. Set as soon as setup
+  // starts, even before twoFactorEnabled is confirmed true, so a re-scanned
+  // QR code during setup stays consistent with the confirmation step.
+  twoFactorSecret  String?
+  // JSON array of bcrypt-hashed one-time backup codes; consumed via a
+  // conditional updateMany keyed on the current JSON value, so two
+  // concurrent logins can't both spend the same code.
+  twoFactorBackupCodes String?
+
   // Notification settings
   notifyEnabled  Boolean @default(false)
   // At least one of notifyEmail/notifyTelegram must be true when notifyEnabled;
