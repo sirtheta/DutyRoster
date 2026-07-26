@@ -19,6 +19,7 @@ const ALT_MATCH: Record<string, string> = {
   "users-new-dialog": "Dialog zum Anlegen eines neuen Benutzers",
   "users-edit-dialog": "Dialog zum Bearbeiten eines bestehenden Benutzers",
   settings: "Einstellungsseite mit SMTP- und Telegram-Konfiguration",
+  "two-factor-dialog": "Dialog Zwei-Faktor-Authentifizierung aktivieren mit QR-Code",
 };
 
 function main() {

@@ -115,6 +115,20 @@ const shots: Shot[] = [
     },
   },
   {
+    name: "two-factor-dialog",
+    run: async (page) => {
+      await login(page, ADMIN);
+      await page.goto(`${BASE_URL}/dashboard`);
+      await page.waitForSelector("text=Dienstübersicht");
+      await page.click('button[aria-haspopup="menu"]:has-text("SB"), [data-slot="avatar"]');
+      await page.click("text=Zwei-Faktor-Authentifizierung aktivieren");
+      await page.click("text=Aktivieren");
+      await page.waitForSelector("text=Bestätigungscode");
+      await page.waitForTimeout(150);
+      await page.screenshot({ path: path.join(OUT_DIR, "two-factor-dialog.png") });
+    },
+  },
+  {
     name: "settings",
     run: async (page) => {
       await login(page, ADMIN);
