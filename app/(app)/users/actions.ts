@@ -7,7 +7,7 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { bcryptRounds } from "@/lib/password";
+import { bcryptRounds, isCommonPassword } from "@/lib/password";
 import { Prisma, UserRole, NotifyChannel } from "@prisma/client";
 import { parseDate, toDateString } from "@/lib/date";
 import { notifyCalendarChange } from "@/lib/calendar-events";
@@ -100,6 +100,9 @@ export async function createUserAction(
   if (password && password.length < 8) {
     return { error: "Passwort muss mindestens 8 Zeichen lang sein." };
   }
+  if (password && isCommonPassword(password)) {
+    return { error: "Dieses Passwort kommt in Listen bekannter Datenlecks vor und ist zu unsicher." };
+  }
 
   // No password given: the user logs in via the invite link instead, so the
   // stored hash only needs to be unguessable, never entered by anyone.
@@ -163,6 +166,9 @@ export async function updateUserAction(
   const data: Record<string, unknown> = { ...parsed.data };
   if (typeof password === "string" && password.length > 0) {
     if (password.length < 8) return { error: "Passwort muss mindestens 8 Zeichen lang sein." };
+    if (isCommonPassword(password)) {
+      return { error: "Dieses Passwort kommt in Listen bekannter Datenlecks vor und ist zu unsicher." };
+    }
     data.passwordHash = await hash(password, bcryptRounds);
   }
 

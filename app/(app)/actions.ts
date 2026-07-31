@@ -8,7 +8,7 @@ import { NotifyChannel } from "@prisma/client";
 import { signOut } from "@/lib/auth";
 import { requireSession } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { bcryptRounds } from "@/lib/password";
+import { bcryptRounds, isCommonPassword } from "@/lib/password";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
 import {
@@ -92,6 +92,9 @@ export async function changeOwnPasswordAction(
   }
   if (newPassword.length < 8) {
     return { error: "Neues Passwort muss mindestens 8 Zeichen lang sein." };
+  }
+  if (isCommonPassword(newPassword)) {
+    return { error: "Dieses Passwort kommt in Listen bekannter Datenlecks vor und ist zu unsicher." };
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId } });

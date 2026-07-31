@@ -33,7 +33,7 @@ function userFormData(fields: Record<string, string> = {}): FormData {
   fd.set("name", "New User");
   fd.set("role", "Editor");
   fd.set("notifyEmail", "on");
-  fd.set("password", "password123");
+  fd.set("password", "test-pw-9x7q");
   for (const [k, v] of Object.entries(fields)) fd.set(k, v);
   return fd;
 }
@@ -63,8 +63,8 @@ describe("users actions", () => {
 
     expect(res.error).toBeUndefined();
     const created = await db.prisma.user.findUniqueOrThrow({ where: { email: "new@example.com" } });
-    expect(created.passwordHash).not.toBe("password123");
-    expect(await compare("password123", created.passwordHash)).toBe(true);
+    expect(created.passwordHash).not.toBe("test-pw-9x7q");
+    expect(await compare("test-pw-9x7q", created.passwordHash)).toBe(true);
     expect(created.icalToken).toBeTruthy();
     const audit = await db.prisma.auditLog.findFirstOrThrow({ where: { entityType: "User", action: "CREATE" } });
     expect(audit.entityId).toBe(created.id);
