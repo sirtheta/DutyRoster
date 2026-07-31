@@ -7,7 +7,7 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { bcryptRounds, isCommonPassword } from "@/lib/password";
+import { bcryptRounds, passwordSchema } from "@/lib/password";
 import { Prisma, UserRole, NotifyChannel } from "@prisma/client";
 import { parseDate, toDateString } from "@/lib/date";
 import { notifyCalendarChange } from "@/lib/calendar-events";
@@ -97,11 +97,13 @@ export async function createUserAction(
 
   const password = formData.get("password");
   if (typeof password !== "string") return { error: "Ungültige Eingabe." };
-  if (password && password.length < 8) {
-    return { error: "Passwort muss mindestens 8 Zeichen lang sein." };
-  }
-  if (password && isCommonPassword(password)) {
-    return { error: "Dieses Passwort kommt in Listen bekannter Datenlecks vor und ist zu unsicher." };
+  // An empty password means the user gets an invite link and sets their own,
+  // so only a non-empty value needs to pass the strength check.
+  if (password) {
+    const parsedPassword = passwordSchema.safeParse(password);
+    if (!parsedPassword.success) {
+      return { error: parsedPassword.error.issues[0]?.message ?? "Ungültiges Passwort." };
+    }
   }
 
   // No password given: the user logs in via the invite link instead, so the
@@ -165,9 +167,9 @@ export async function updateUserAction(
   const password = formData.get("password");
   const data: Record<string, unknown> = { ...parsed.data };
   if (typeof password === "string" && password.length > 0) {
-    if (password.length < 8) return { error: "Passwort muss mindestens 8 Zeichen lang sein." };
-    if (isCommonPassword(password)) {
-      return { error: "Dieses Passwort kommt in Listen bekannter Datenlecks vor und ist zu unsicher." };
+    const parsedPassword = passwordSchema.safeParse(password);
+    if (!parsedPassword.success) {
+      return { error: parsedPassword.error.issues[0]?.message ?? "Ungültiges Passwort." };
     }
     data.passwordHash = await hash(password, bcryptRounds);
   }
