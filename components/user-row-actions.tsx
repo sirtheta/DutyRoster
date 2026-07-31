@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { MoreHorizontal } from "lucide-react";
-import { toggleActiveAction } from "@/app/(app)/users/actions";
+import { toggleActiveAction, sendPasswordSetupEmailAction } from "@/app/(app)/users/actions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,6 +17,14 @@ import { UserTerminateDialog } from "@/components/user-terminate-dialog";
 export function UserRowActions({ user }: { user: UserListItem }) {
   const [isPending, startTransition] = useTransition();
   const [terminateOpen, setTerminateOpen] = useState(false);
+
+  function sendPasswordLink() {
+    startTransition(async () => {
+      const result = await sendPasswordSetupEmailAction(user.id);
+      if (result.error) toast.error(result.error);
+      else toast.success("Passwort-Link gesendet.");
+    });
+  }
 
   return (
     <div className="flex items-center justify-end gap-1">
@@ -40,6 +49,9 @@ export function UserRowActions({ user }: { user: UserListItem }) {
             onClick={() => startTransition(() => toggleActiveAction(user.id, !user.isActive))}
           >
             {user.isActive ? "Deaktivieren" : "Aktivieren"}
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={isPending} onClick={sendPasswordLink}>
+            Passwort-Link senden
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={(e) => {

@@ -5,6 +5,13 @@ import { createTestDatabase, createTestUser } from "../test-utils";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+const mockSendPlanEmail = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/lib/email", () => ({
+  get sendPlanEmail() {
+    return mockSendPlanEmail;
+  },
+}));
+
 const db = createTestDatabase();
 vi.mock("@/lib/prisma", () => ({ get default() { return db.prisma; } }));
 
@@ -34,6 +41,9 @@ function userFormData(fields: Record<string, string> = {}): FormData {
 describe("users actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // appOrigin() short-circuits on AUTH_URL, skipping next/headers() — which
+    // has no request scope to read from outside an actual HTTP request.
+    process.env.AUTH_URL = "https://roster.example.ch";
   });
 
   it("rejects a non-admin from creating a user", async () => {
@@ -85,6 +95,30 @@ describe("users actions", () => {
     const res = await createUserAction(undefined, userFormData({ password: "short" }));
 
     expect(res.error).toMatch(/Passwort/);
+  });
+
+  it("creates a user without a password and sends an invite email instead", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    await db.prisma.systemSettings.create({
+      data: { id: 1, smtpHost: "smtp.example.com", smtpUser: "u@example.com", smtpPassword: "x" },
+    });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { createUserAction } = await import("@/app/(app)/users/actions");
+    const res = await createUserAction(undefined, userFormData({ password: "" }));
+
+    expect(res.error).toBeUndefined();
+    const created = await db.prisma.user.findUniqueOrThrow({ where: { email: "new@example.com" } });
+    expect(created.passwordHash).toBeTruthy();
+
+    expect(mockSendPlanEmail).toHaveBeenCalledTimes(1);
+    const [, to, subject, body] = mockSendPlanEmail.mock.calls[0];
+    expect(to).toBe("new@example.com");
+    expect(subject).toContain("Konto erstellt");
+    expect(body).toContain("/reset-password?token=");
+
+    const token = await db.prisma.passwordResetToken.findFirst({ where: { userId: created.id } });
+    expect(token).toBeTruthy();
   });
 
   it("rejects creating a user with a negative rotation order", async () => {
@@ -205,6 +239,35 @@ describe("users actions", () => {
     const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: target.id } });
     expect(updated.isActive).toBe(true);
     expect(updated.exitDate).toBeNull();
+  });
+
+  it("sends a password setup link for an existing user", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    const target = await db.prisma.user.create({ data: createTestUser({ email: "target@example.com" }) });
+    await db.prisma.systemSettings.create({
+      data: { id: 1, smtpHost: "smtp.example.com", smtpUser: "u@example.com", smtpPassword: "x" },
+    });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { sendPasswordSetupEmailAction } = await import("@/app/(app)/users/actions");
+    const res = await sendPasswordSetupEmailAction(target.id);
+
+    expect(res).toEqual({ success: true });
+    expect(mockSendPlanEmail).toHaveBeenCalledTimes(1);
+    expect(mockSendPlanEmail.mock.calls[0][1]).toBe("target@example.com");
+  });
+
+  it("surfaces a friendly error when the password setup mail can't be sent", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    const target = await db.prisma.user.create({ data: createTestUser({ email: "target@example.com" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    // No SystemSettings row -> sendInviteEmail throws "SMTP nicht konfiguriert".
+    const { sendPasswordSetupEmailAction } = await import("@/app/(app)/users/actions");
+    const res = await sendPasswordSetupEmailAction(target.id);
+
+    expect(res.error).toBeTruthy();
+    expect(mockSendPlanEmail).not.toHaveBeenCalled();
   });
 
   function terminateFormData(id: number, exitDate: string, regenerate = false): FormData {

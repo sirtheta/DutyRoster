@@ -109,9 +109,18 @@ export function UserFormDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="password">
-              Passwort {mode === "edit" && <span className="text-muted-foreground">(leer lassen = unverändert)</span>}
+              Passwort{" "}
+              <span className="text-muted-foreground">
+                {mode === "edit" ? "(leer lassen = unverändert)" : "(optional)"}
+              </span>
             </Label>
-            <PasswordInput id="password" name="password" minLength={8} required={mode === "create"} />
+            <PasswordInput id="password" name="password" minLength={8} />
+            {mode === "create" && (
+              <p className="text-xs text-muted-foreground">
+                Leer lassen, damit der Benutzer eine E-Mail mit einem Link erhält, um selbst ein
+                Passwort zu setzen.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="rotationOrder">Rotations-Reihenfolge</Label>
