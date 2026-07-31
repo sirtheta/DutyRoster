@@ -121,6 +121,20 @@ describe("users actions", () => {
     expect(token).toBeTruthy();
   });
 
+  it("still creates the user when the invite email fails to send", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+    // No SystemSettings row -> sendInviteEmail throws "SMTP nicht konfiguriert",
+    // caught and logged rather than surfaced — the account must still exist.
+
+    const { createUserAction } = await import("@/app/(app)/users/actions");
+    const res = await createUserAction(undefined, userFormData({ password: "" }));
+
+    expect(res.error).toBeUndefined();
+    const created = await db.prisma.user.findUniqueOrThrow({ where: { email: "new@example.com" } });
+    expect(created.passwordHash).toBeTruthy();
+  });
+
   it("rejects creating a user with a negative rotation order", async () => {
     const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
     currentSession = sessionFor(admin.id, "Admin");
