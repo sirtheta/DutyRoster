@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.11](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.10...DutyRoster-v0.4.11) (2026-08-04)
+
+
+### Features
+
+* **auth:** reject passwords found in known data breaches ([cd334a8](https://github.com/sirtheta/DutyRoster/commit/cd334a8c5af8129fe5db431cfe8f3a328ad93dee))
+* **users:** let new users set their own password via email invite ([b0a0979](https://github.com/sirtheta/DutyRoster/commit/b0a09792df4295127897f222841b0f5813b0f8eb))
+
+
+### Bug Fixes
+
+* **auth:** add global rate limit to password reset requests ([68ee720](https://github.com/sirtheta/DutyRoster/commit/68ee720e4cd0d5c52a26a8ad8580c865e9ff40fc))
+* **auth:** reject passwords longer than bcrypt's 72-byte limit ([c5ce25a](https://github.com/sirtheta/DutyRoster/commit/c5ce25a2703c3c97460bc7ee5b18086b616f557a))
+* **theme:** forward CSP nonce to next-themes' own script ([#71](https://github.com/sirtheta/DutyRoster/issues/71)) ([20cf205](https://github.com/sirtheta/DutyRoster/commit/20cf20540afa5fb34d708450a60790546e1b7c67))
+
 ## [0.4.10](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.9...DutyRoster-v0.4.10) (2026-07-26)
 
 
