@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const state = vi.hoisted(() => ({
   authorize: null as ((creds: unknown, req?: unknown) => Promise<unknown>) | null,
   jwt: null as ((args: Record<string, unknown>) => Promise<unknown>) | null,
+  logger: null as { error: (e: Error) => void; warn: (code: string) => void } | null,
 }));
 
 vi.mock("next-auth/providers/credentials", () => ({
@@ -20,8 +21,12 @@ const { MockCredentialsSignin } = vi.hoisted(() => ({
   },
 }));
 vi.mock("next-auth", () => ({
-  default: (config: { callbacks: { jwt: (args: Record<string, unknown>) => Promise<unknown> } }) => {
+  default: (config: {
+    callbacks: { jwt: (args: Record<string, unknown>) => Promise<unknown> };
+    logger: { error: (e: Error) => void; warn: (code: string) => void };
+  }) => {
     state.jwt = config.callbacks.jwt;
+    state.logger = config.logger;
     return { handlers: {}, auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn() };
   },
   CredentialsSignin: MockCredentialsSignin,
@@ -45,9 +50,10 @@ vi.mock("@/lib/config", () => ({
     bcrypt: { rounds: 10 },
   },
 }));
-vi.mock("@/lib/logger", () => ({
-  default: { child: () => ({ warn: () => {}, info: () => {}, error: () => {} }) },
+const { logMock } = vi.hoisted(() => ({
+  logMock: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
+vi.mock("@/lib/logger", () => ({ default: { child: () => logMock } }));
 
 // Import triggers NextAuth({...}) → state.authorize is set
 import "@/lib/auth";
@@ -239,6 +245,26 @@ describe("auth.ts – authorize()", () => {
     await expect(
       callAuthorize({ email: "user@test.ch", password: "correct", code: "WXYZ-1234" })
     ).rejects.toMatchObject({ code: "two_factor_invalid" });
+  });
+});
+
+describe("auth.ts – logger override", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("swallows CredentialsSignin errors — authorize() already logged the attempt", () => {
+    state.logger!.error(new MockCredentialsSignin("wrong password"));
+    expect(logMock.error).not.toHaveBeenCalled();
+  });
+
+  it("routes real auth errors and warnings through the app logger", () => {
+    const err = new Error("adapter exploded");
+    state.logger!.error(err);
+    state.logger!.warn("debug-enabled");
+
+    expect(logMock.error).toHaveBeenCalledWith({ err }, "next-auth error");
+    expect(logMock.warn).toHaveBeenCalledWith({ code: "debug-enabled" }, "next-auth warning");
   });
 });
 

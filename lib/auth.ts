@@ -124,6 +124,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: "/login",
   },
+  // next-auth's built-in logger writes to console.error directly, so its
+  // output ends up unstructured in logs/app.log next to our pino lines.
+  // Route it through pino instead — and drop CredentialsSignin entirely:
+  // a wrong password or 2FA code is expected, authorize() already logs it
+  // with the email, and the attached stack is minified build chunks that
+  // point at nothing. `debug` stays on next-auth's own (off unless config.debug).
+  logger: {
+    error(error) {
+      if (error instanceof CredentialsSignin) return;
+      log.error({ err: error }, "next-auth error");
+    },
+    warn(code) {
+      log.warn({ code }, "next-auth warning");
+    },
+  },
   session: {
     strategy: "jwt",
     maxAge: config.session.maxAgeSec,
