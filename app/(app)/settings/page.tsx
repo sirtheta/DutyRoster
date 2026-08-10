@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/permissions";
 import { SettingsForm } from "@/components/settings-form";
 import { DevToolsCard } from "@/components/dev-tools-card";
 import { FailedNotificationsCard } from "@/components/failed-notifications-card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const failedAtFormat = new Intl.DateTimeFormat("de-CH", {
   dateStyle: "short",
@@ -66,6 +67,42 @@ export default async function SettingsPage() {
         settings={formSettings ?? null}
         telegramBotTokenSet={telegramBotTokenSet}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Automatische Abläufe</CardTitle>
+          <CardDescription>Über Umgebungsvariablen konfigurierbar</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm">
+            <dt className="text-muted-foreground">Benachrichtigungen</dt>
+            <dd className="font-mono text-xs">{config.notifications.cronSchedule}</dd>
+            <dt className="text-muted-foreground">Zeitzone</dt>
+            <dd className="font-mono text-xs">{config.notifications.timezone}</dd>
+            <dt className="text-muted-foreground">Max. Zustellversuche</dt>
+            <dd className="font-mono text-xs">{config.notifications.maxAttempts}</dd>
+            <dt className="text-muted-foreground">Benachrichtigungen aufbewahren</dt>
+            <dd className="font-mono text-xs">
+              {config.notifications.retentionDays === 0
+                ? "unbegrenzt"
+                : `${config.notifications.retentionDays} Tage`}
+            </dd>
+            <dt className="text-muted-foreground">Backup</dt>
+            <dd className="font-mono text-xs">{config.backup.cronSchedule}</dd>
+            <dt className="text-muted-foreground">Backups aufbewahren</dt>
+            <dd className="font-mono text-xs">
+              {config.backup.maxKeepDays === 0 ? "alle" : `${config.backup.maxKeepDays} Tage`}
+            </dd>
+            <dt className="text-muted-foreground">Audit-Log aufbewahren</dt>
+            <dd className="font-mono text-xs">
+              {config.audit.retentionDays === 0
+                ? "unbegrenzt"
+                : `${config.audit.retentionDays} Tage`}
+            </dd>
+          </dl>
+        </CardContent>
+      </Card>
+
       {process.env.NODE_ENV !== "production" && <DevToolsCard />}
     </div>
   );
