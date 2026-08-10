@@ -173,6 +173,28 @@ describe("users actions", () => {
     expect(res.error).toBe("E-Mail-Adresse wird bereits verwendet.");
   });
 
+  it("normalizes a mixed-case email to lowercase on create", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { createUserAction } = await import("@/app/(app)/users/actions");
+    const res = await createUserAction(undefined, userFormData({ email: "  New.User@Example.COM  " }));
+
+    expect(res.error).toBeUndefined();
+    const created = await db.prisma.user.findUniqueOrThrow({ where: { email: "new.user@example.com" } });
+    expect(created.email).toBe("new.user@example.com");
+  });
+
+  it("rejects a duplicate email that only differs in case", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin", email: "dup@example.com" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { createUserAction } = await import("@/app/(app)/users/actions");
+    const res = await createUserAction(undefined, userFormData({ email: "Dup@Example.com" }));
+
+    expect(res.error).toBe("E-Mail-Adresse wird bereits verwendet.");
+  });
+
   it("updates a user's email without touching the password when none is given", async () => {
     const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
     const target = await db.prisma.user.create({ data: createTestUser({ email: "old@example.com" }) });

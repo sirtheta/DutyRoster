@@ -134,7 +134,9 @@ function seedAdminUser(db, dataDir) {
   try {
     const { count } = db.prepare('SELECT COUNT(*) as count FROM "User"').get();
     if (count === 0) {
-      const email = process.env.ADMIN_EMAIL    ?? 'admin@example.com';
+      // Lowercased so it matches the case-insensitive lookup used at login
+      // (see lib/normalize-email.ts) regardless of how it's cased in the env.
+      const email = (process.env.ADMIN_EMAIL ?? 'admin@example.com').trim().toLowerCase();
       const name  = process.env.ADMIN_NAME     ?? 'Admin';
       let   hash  = process.env.ADMIN_PASSWORD_HASH;
       if (!hash) {

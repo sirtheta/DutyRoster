@@ -16,6 +16,7 @@ import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { createPasswordResetToken } from "@/lib/password-reset";
 import { appOrigin } from "@/lib/origin";
+import { emailSchema } from "@/lib/normalize-email";
 import logger from "@/lib/logger";
 
 const log = logger.child({ module: "users" });
@@ -44,7 +45,7 @@ async function sendInviteEmail(userId: number, name: string, email: string): Pro
 
 const userSchema = z
   .object({
-    email: z.string().email(),
+    email: emailSchema,
     name: z.string().min(1),
     role: z.enum(UserRole),
     rotationOrder: z.coerce.number().int().min(0).default(0),

@@ -102,6 +102,24 @@ describe("password reset actions", () => {
     expect(JSON.parse(audit.details!)).toMatchObject({ action: "passwordReset" });
   });
 
+  it("finds the account regardless of the email's casing", async () => {
+    const { prisma } = db;
+    await prisma.user.create({
+      data: createTestUser({ email: "flow@example.com", passwordHash: "old-hash" }),
+    });
+    await prisma.systemSettings.create({
+      data: { id: 1, smtpHost: "smtp.example.com", smtpUser: "u@example.com", smtpPassword: "x" },
+    });
+
+    const { requestPasswordResetAction } = await import("@/app/(auth)/forgot-password/actions");
+    const form = new FormData();
+    form.set("email", "  Flow@Example.COM  ");
+    const requestResult = await requestPasswordResetAction(undefined, form);
+
+    expect(requestResult).toEqual({ success: true });
+    expect(mockSendPlanEmail).toHaveBeenCalledOnce();
+  });
+
   it("answers generically for unknown or inactive accounts and sends nothing", async () => {
     const { prisma } = db;
     await prisma.user.create({
