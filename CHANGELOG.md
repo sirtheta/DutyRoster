@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.13](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.12...DutyRoster-v0.4.13) (2026-08-10)
+
+
+### Features
+
+* **calendar:** add "Heute" button to jump to today's column ([#82](https://github.com/sirtheta/DutyRoster/issues/82)) ([5146038](https://github.com/sirtheta/DutyRoster/commit/5146038ba70b74ddd8a26bd14da01899e52561e0))
+* **logs:** admin log export from the UI ([#86](https://github.com/sirtheta/DutyRoster/issues/86)) ([a0343d7](https://github.com/sirtheta/DutyRoster/commit/a0343d7ec56dceb843a8788965d14680593da262))
+* **settings:** show automated jobs overview card ([#83](https://github.com/sirtheta/DutyRoster/issues/83)) ([f442227](https://github.com/sirtheta/DutyRoster/commit/f44222729aaf9c57670f0cf958ab9ad90642d2c7))
+
+
+### Bug Fixes
+
+* **auth:** make email lookups case-insensitive ([#85](https://github.com/sirtheta/DutyRoster/issues/85)) ([70ff17a](https://github.com/sirtheta/DutyRoster/commit/70ff17aab9978cc4cdaea1e8038522184e52c172))
+
 ## [0.4.12](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.11...DutyRoster-v0.4.12) (2026-08-10)
 
 
