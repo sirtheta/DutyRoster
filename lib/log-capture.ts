@@ -1,4 +1,4 @@
-import { createWriteStream, mkdirSync } from "fs";
+import { createWriteStream, mkdirSync, writeSync } from "fs";
 import { dirname, join } from "path";
 
 /**
@@ -57,10 +57,23 @@ export function startLogCapture(): void {
   if (globalForCapture.logCaptureStarted) return;
   mkdirSync(LOG_DIR, { recursive: true });
   const file = createWriteStream(LOG_FILE, { flags: "a" });
+  let errorReported = false;
   file.on("error", (err) => {
     // Not routed through the logger: if the log file itself is the problem,
-    // writing about it there is the last thing that should happen.
-    process.stderr.write(`[logs] failed to write to ${LOG_FILE}: ${err.message}\n`);
+    // writing about it there is the last thing that should happen. And not
+    // through `process.stderr` either — tee() feeds that straight back into
+    // this same failing stream, so each report would emit another "error"
+    // and the handler would recurse until the stack blows. `writeSync(2, …)`
+    // goes to the raw file descriptor, past the patched `write`. Reported
+    // once: a full disk fires "error" for every queued write, and thousands
+    // of identical lines help nobody.
+    if (errorReported) return;
+    errorReported = true;
+    try {
+      writeSync(2, `[logs] failed to write to ${LOG_FILE}: ${err.message}\n`);
+    } catch {
+      // stderr itself is gone — nothing left to report to.
+    }
   });
   tee(process.stdout, file);
   tee(process.stderr, file);
