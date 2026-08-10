@@ -1,3 +1,4 @@
+<meta charset="utf-8" />
 <title>Sanitätsplaner – Benutzerhandbuch</title>
 <meta name="description" content="Vollständige Anleitung für Admin und Editor: Kalender, Diensttausch, Benutzerverwaltung, Einstellungen und mehr." />
 <style>
@@ -169,6 +170,57 @@
     font-size: 11.5px; color: var(--ink-faint); line-height: 1.5;
   }
 
+  /* ── Handbuch-Suche ────────────────────────────────────────────────── */
+  .search-box { position: relative; margin: 0 0 16px; }
+  .search-box input[type="search"] {
+    width: 100%; box-sizing: border-box; font: inherit; font-size: 13.5px;
+    padding: 8px 34px 8px 32px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--ink); outline: none;
+    transition: border-color .12s, background .12s;
+  }
+  .search-box input[type="search"]::-webkit-search-cancel-button,
+  .search-box input[type="search"]::-webkit-search-decoration { display: none; }
+  .search-box input[type="search"]:focus { border-color: var(--accent-border); background: var(--surface); }
+  .search-box input[type="search"]::placeholder { color: var(--ink-faint); }
+  .search-box .search-ic {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--ink-faint); pointer-events: none; font-size: 13px; line-height: 1;
+  }
+  .search-box .search-hint {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 10.5px; padding: 1px 6px;
+  }
+  .search-box .search-clear {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    display: none; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border: none; border-radius: 5px; cursor: pointer;
+    background: transparent; color: var(--ink-faint); font-size: 13px; line-height: 1;
+  }
+  .search-box .search-clear:hover { background: var(--surface-3); color: var(--ink); }
+  .search-box.has-value .search-hint { display: none; }
+  .search-box.has-value .search-clear { display: flex; }
+  .sidebar.searching .nav-scroll { display: none; }
+
+  .search-results { display: flex; flex-direction: column; gap: 4px; }
+  .search-results-meta { font-size: 11px; color: var(--ink-faint); padding: 0 2px 8px; }
+  .search-result {
+    display: block; padding: 8px 10px; border-radius: 8px; text-decoration: none;
+    color: var(--ink); border: 1px solid transparent;
+  }
+  .search-result:hover, .search-result.is-active { background: var(--surface-2); border-color: var(--border); }
+  .search-result-section {
+    display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--accent); margin-bottom: 2px;
+  }
+  .search-result-snippet { display: block; font-size: 12.5px; color: var(--ink-muted); line-height: 1.45; }
+  .search-result-snippet mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; padding: 0 1px; }
+  .search-empty { font-size: 12.5px; color: var(--ink-faint); padding: 10px 2px; }
+
+  @keyframes searchFlash {
+    from { background: var(--accent-soft); }
+    to { background: transparent; }
+  }
+  .search-flash { animation: searchFlash 1.6s ease-out; border-radius: 8px; }
+
   main { min-width: 0; padding: 0 0 100px; }
 
   /* ── Hero / intro banner ──────────────────────────────────────────── */
@@ -194,6 +246,7 @@
   .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 6px; flex-wrap: wrap; }
   .section-head h2 { font-size: 24px; margin: 0; }
   .section-head h3.sub { font-size: 18px; margin: 34px 0 4px; }
+  h3.sub { scroll-margin-top: 20px; }
   .pill-row { display: flex; gap: 6px; flex-wrap: wrap; }
   .pill {
     display: inline-flex; align-items: center; gap: 5px;
@@ -334,6 +387,14 @@
       </div>
     </div>
 
+    <div class="search-box" id="searchBox" role="search">
+      <span class="search-ic" aria-hidden="true">⌕</span>
+      <input type="search" id="searchInput" placeholder="Handbuch durchsuchen…" aria-label="Handbuch durchsuchen" aria-controls="searchResults" autocomplete="off" />
+      <kbd class="search-hint" aria-hidden="true">/</kbd>
+      <button type="button" class="search-clear" id="searchClear" aria-label="Suche zurücksetzen">✕</button>
+    </div>
+    <div class="search-results" id="searchResults" role="region" aria-label="Suchergebnisse" aria-live="polite" hidden></div>
+
     <button class="menu-toggle" id="menuToggle" aria-expanded="true" aria-controls="navScroll">
       Inhaltsverzeichnis
       <span aria-hidden="true">▾</span>
@@ -398,6 +459,10 @@
         <span class="pill all" style="vertical-align:1px">Alle Rollen</span> markiert; Admin-exklusive Bereiche mit
         <span class="pill admin" style="vertical-align:1px">Admin</span>.
       </p>
+      <div class="callout tip">
+        <div class="ic">🔎</div>
+        <div><strong>Suche</strong> Über das Suchfeld oben links in der Seitenleiste (Tastenkürzel <kbd>/</kbd>) lässt sich das gesamte Handbuch durchsuchen – Treffer erscheinen sofort als Liste mit Sprungmarke zum passenden Abschnitt.</div>
+      </div>
 
       <h3 class="sub" id="rollen">Rollen &amp; Rechte im Überblick</h3>
       <p class="dek" style="margin-bottom:14px">
@@ -812,8 +877,8 @@
 
     var toggle = document.getElementById('menuToggle');
     var sidebar = document.getElementById('sidebar');
+    function isMobile() { return window.matchMedia('(max-width: 900px)').matches; }
     if (toggle) {
-      function isMobile() { return window.matchMedia('(max-width: 900px)').matches; }
       if (isMobile()) sidebar.classList.add('collapsed');
       toggle.addEventListener('click', function () {
         sidebar.classList.toggle('collapsed');
@@ -825,5 +890,177 @@
         });
       });
     }
+
+    /* ── Handbuch-Suche ──────────────────────────────────────────────── */
+    (function () {
+      var input = document.getElementById('searchInput');
+      var box = document.getElementById('searchBox');
+      var clearBtn = document.getElementById('searchClear');
+      var results = document.getElementById('searchResults');
+      if (!input || !box || !results) return;
+
+      function normalize(s) {
+        return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      }
+      function escapeHtml(s) {
+        return (s || '').replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+      function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+      // Give every h3.sub a stable, unique id so search results can deep-link to it.
+      var usedIds = {};
+      Array.prototype.forEach.call(document.querySelectorAll('main [id]'), function (el) { usedIds[el.id] = true; });
+      Array.prototype.forEach.call(document.querySelectorAll('main h3.sub'), function (h) {
+        if (h.id) return;
+        var base = normalize(h.textContent).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'abschnitt';
+        var id = base, n = 2;
+        while (usedIds[id]) { id = base + '-' + n; n++; }
+        usedIds[id] = true;
+        h.id = id;
+      });
+
+      // Build the search index: one entry per heading, plus one per content block, in document order.
+      var CONTENT_SELECTOR = 'h2, h3.sub, p, li, td, figcaption, .legend-card, .callout';
+      var index = [];
+      Array.prototype.forEach.call(document.querySelectorAll('main section.doc'), function (section) {
+        var sectionTitleEl = section.querySelector('h2');
+        var sectionTitle = sectionTitleEl ? sectionTitleEl.textContent.trim() : section.id;
+        var currentAnchor = section.id;
+        var currentTitle = sectionTitle;
+        Array.prototype.forEach.call(section.querySelectorAll(CONTENT_SELECTOR), function (el) {
+          if (el.tagName === 'H2') return;
+          if (el.tagName === 'H3' && el.classList.contains('sub')) {
+            currentAnchor = el.id;
+            currentTitle = el.textContent.trim();
+            index.push({ sectionTitle: sectionTitle, title: currentTitle, anchor: currentAnchor, text: '', norm: normalize(currentTitle) });
+            return;
+          }
+          var text = el.textContent.replace(/\s+/g, ' ').trim();
+          if (!text) return;
+          index.push({
+            sectionTitle: sectionTitle,
+            title: currentTitle,
+            anchor: currentAnchor,
+            text: text,
+            norm: normalize(currentTitle + ' ' + text)
+          });
+        });
+      });
+
+      function makeSnippet(text, query) {
+        if (!text) return '';
+        var normText = normalize(text);
+        var idx = normText.indexOf(query);
+        if (idx === -1) return text.length > 140 ? text.slice(0, 140) + '…' : text;
+        var start = Math.max(0, idx - 40);
+        var end = Math.min(text.length, idx + query.length + 70);
+        var snippet = text.slice(start, end);
+        if (start > 0) snippet = '…' + snippet;
+        if (end < text.length) snippet = snippet + '…';
+        return snippet;
+      }
+
+      function highlight(text, rawQuery) {
+        var esc = escapeHtml(text);
+        if (!rawQuery) return esc;
+        try {
+          return esc.replace(new RegExp('(' + escapeRegex(rawQuery) + ')', 'ig'), '<mark>$1</mark>');
+        } catch (e) {
+          return esc;
+        }
+      }
+
+      function search(rawQuery) {
+        var query = normalize(rawQuery.trim());
+        if (!query) return [];
+        var matches = [];
+        index.forEach(function (entry) {
+          var titleNorm = normalize(entry.title);
+          var score = 0;
+          if (titleNorm.indexOf(query) !== -1) score += titleNorm === query ? 30 : 10;
+          if (entry.norm.indexOf(query) !== -1) score += 1;
+          if (score > 0) matches.push({ entry: entry, score: score });
+        });
+        matches.sort(function (a, b) { return b.score - a.score; });
+        return matches.slice(0, 25).map(function (m) {
+          var snippetSource = m.entry.text || m.entry.title;
+          return {
+            sectionTitle: m.entry.sectionTitle,
+            title: m.entry.title,
+            anchor: m.entry.anchor,
+            snippet: makeSnippet(snippetSource, query)
+          };
+        });
+      }
+
+      function renderResults(rawQuery) {
+        var query = rawQuery.trim();
+        box.classList.toggle('has-value', query.length > 0);
+        if (!query) {
+          results.hidden = true;
+          sidebar.classList.remove('searching');
+          results.innerHTML = '';
+          return;
+        }
+        sidebar.classList.add('searching');
+        results.hidden = false;
+        var found = search(query);
+        if (!found.length) {
+          results.innerHTML = '<div class="search-empty">Keine Treffer für „' + escapeHtml(query) + '“.</div>';
+          return;
+        }
+        var meta = '<div class="search-results-meta">' + found.length + (found.length === 25 ? '+' : '') + ' Treffer</div>';
+        var items = found.map(function (r) {
+          var heading = r.title === r.sectionTitle ? escapeHtml(r.sectionTitle) : escapeHtml(r.sectionTitle) + ' › ' + escapeHtml(r.title);
+          return '<a href="#' + r.anchor + '" class="search-result">' +
+            '<span class="search-result-section">' + heading + '</span>' +
+            '<span class="search-result-snippet">' + highlight(r.snippet, query) + '</span>' +
+            '</a>';
+        }).join('');
+        results.innerHTML = meta + items;
+      }
+
+      input.addEventListener('input', function () { renderResults(input.value); });
+
+      clearBtn.addEventListener('click', function () {
+        input.value = '';
+        renderResults('');
+        input.focus();
+      });
+
+      results.addEventListener('click', function (e) {
+        var a = e.target.closest('.search-result');
+        if (!a) return;
+        var id = a.getAttribute('href').slice(1);
+        var target = document.getElementById(id);
+        if (target) {
+          window.setTimeout(function () {
+            target.classList.add('search-flash');
+            window.setTimeout(function () { target.classList.remove('search-flash'); }, 1600);
+          }, 40);
+        }
+        if (isMobile()) sidebar.classList.add('collapsed');
+      });
+
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          input.value = '';
+          renderResults('');
+          input.blur();
+        }
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+        var tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+        e.preventDefault();
+        if (isMobile()) sidebar.classList.remove('collapsed');
+        input.focus();
+        input.select();
+      });
+    })();
   })();
 </script>
