@@ -82,14 +82,18 @@ export function UserMenu({
         </DropdownMenuContent>
       </DropdownMenu>
       <ChangePasswordDialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen} />
+      {/* The keys remount each dialog on open so its internal form state starts
+          fresh. They must be prefixed per dialog: a bare "open"/"closed" gives
+          both siblings the key "closed" while they're shut, which React warns
+          about and which would drop one of them if these ever moved into a list. */}
       <NotificationSettingsDialog
-        key={notificationDialogOpen ? "open" : "closed"}
+        key={`notify-${notificationDialogOpen}`}
         open={notificationDialogOpen}
         onOpenChange={setNotificationDialogOpen}
         settings={notificationSettings}
       />
       <TwoFactorSettingsDialog
-        key={twoFactorDialogOpen ? "open" : "closed"}
+        key={`twofa-${twoFactorDialogOpen}`}
         open={twoFactorDialogOpen}
         onOpenChange={setTwoFactorDialogOpen}
         enabled={twoFactorEnabledState}
