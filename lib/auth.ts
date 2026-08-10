@@ -11,6 +11,7 @@ import logger from "@/lib/logger";
 import { checkRateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { config } from "@/lib/config";
 import { emailSchema } from "@/lib/normalize-email";
+import { canSignIn } from "@/lib/users";
 
 const log = logger.child({ module: "auth" });
 
@@ -62,11 +63,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.isActive) {
+        if (!user || !canSignIn(user)) {
           // Equalize response time with the real password check so the
           // duration does not reveal whether the email exists.
           await dummyCompare(password);
-          log.warn({ email }, "login failed: user not found or inactive");
+          log.warn({ email }, "login failed: user not found or no longer employed");
           return null;
         }
 
@@ -147,10 +148,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!Number.isInteger(userId)) return null;
         const dbUser = await prisma.user.findUnique({
           where: { id: userId },
-          select: { role: true, isActive: true, name: true, email: true },
+          select: { role: true, isActive: true, exitDate: true, name: true, email: true },
         });
-        if (!dbUser || !dbUser.isActive) {
-          log.info({ userId: token.id }, "session invalidated: user missing or inactive");
+        if (!dbUser || !canSignIn(dbUser)) {
+          log.info({ userId: token.id }, "session invalidated: user missing or no longer employed");
           return null;
         }
         token.role = dbUser.role;
