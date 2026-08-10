@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.12](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.11...DutyRoster-v0.4.12) (2026-08-10)
+
+
+### Features
+
+* **calendar:** highlight individual uncovered days, not just whole weeks ([#81](https://github.com/sirtheta/DutyRoster/issues/81)) ([d118bea](https://github.com/sirtheta/DutyRoster/commit/d118beab7646f77e3464e3363284c3d84f03c152))
+* **docs:** add client-side search to user manual ([#78](https://github.com/sirtheta/DutyRoster/issues/78)) ([c950898](https://github.com/sirtheta/DutyRoster/commit/c9508985e286867ed033703b5ed0fb57f9e096f2))
+
+
+### Bug Fixes
+
+* **audit:** show plain-text descriptions instead of raw JSON action codes ([#80](https://github.com/sirtheta/DutyRoster/issues/80)) ([cc164b4](https://github.com/sirtheta/DutyRoster/commit/cc164b4db3f06e0d2ce4456ece532bf7e701d986))
+
 ## [0.4.11](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.10...DutyRoster-v0.4.11) (2026-08-04)
 
 
