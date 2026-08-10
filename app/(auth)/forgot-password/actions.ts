@@ -1,7 +1,6 @@
 "use server";
 
 import { headers } from "next/headers";
-import { z } from "zod";
 import prisma from "@/lib/prisma";
 import logger from "@/lib/logger";
 import { config } from "@/lib/config";
@@ -9,10 +8,9 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { createPasswordResetToken } from "@/lib/password-reset";
 import { sendPlanEmail } from "@/lib/email";
 import { appOrigin } from "@/lib/origin";
+import { emailSchema } from "@/lib/normalize-email";
 
 const log = logger.child({ module: "password-reset" });
-
-const emailSchema = z.string().email();
 
 /**
  * Requests a password-reset email. Always answers with the same generic
@@ -33,7 +31,8 @@ export async function requestPasswordResetAction(
   // spreads requests across many IPs and target addresses to flood the
   // mail queue rather than any single recipient.
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const emailAllowed = checkRateLimit(`pwreset:${email.toLowerCase()}`, { maxAttempts: 3 });
+  // email is already trimmed/lowercased by emailSchema, so this key is canonical.
+  const emailAllowed = checkRateLimit(`pwreset:${email}`, { maxAttempts: 3 });
   const ipAllowed = checkRateLimit(`pwreset-ip:${ip}`, {
     maxAttempts: config.rateLimit.maxAttempts * 10,
   });

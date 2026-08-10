@@ -10,11 +10,12 @@ import { decryptSecret } from "@/lib/crypto";
 import logger from "@/lib/logger";
 import { checkRateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { config } from "@/lib/config";
+import { emailSchema } from "@/lib/normalize-email";
 
 const log = logger.child({ module: "auth" });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string().min(1),
   code: z.string().optional(),
 });
@@ -44,9 +45,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const { email, password, code } = parsed.data;
 
-        // Normalized only for the rate-limit key (DB lookup stays exact),
-        // so "User@x.ch" and "user@x.ch " share one bucket.
-        const rateLimitKey = `login:${email.trim().toLowerCase()}`;
+        // `email` is already trimmed/lowercased by emailSchema, so this key
+        // and the DB lookup below both use the same canonical form — "User@x.ch"
+        // and "user@x.ch " share one rate-limit bucket and find the same account.
+        const rateLimitKey = `login:${email}`;
         // Broader per-IP bucket: limits spraying many accounts from one IP
         // without letting one IP lock out a shared office network.
         const ip =
