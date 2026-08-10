@@ -10,8 +10,8 @@ import type { AuditAction, AuditEntity } from "@/lib/audit";
 
 const PAGE_SIZE = 50;
 
-const ENTITY_TYPES: AuditEntity[] = ["Entry", "Holiday", "User", "Settings"];
-const ACTIONS: AuditAction[] = ["CREATE", "UPDATE", "DELETE", "MOVE", "AUTOMATIC", "SETTINGS"];
+const ENTITY_TYPES: AuditEntity[] = ["Entry", "Holiday", "User", "Settings", "SwapRequest"];
+const ACTIONS: AuditAction[] = ["CREATE", "UPDATE", "DELETE", "MOVE", "AUTOMATIC", "SETTINGS", "TERMINATE"];
 
 export default async function AuditPage({
   searchParams,

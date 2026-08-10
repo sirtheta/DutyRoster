@@ -101,7 +101,7 @@ describe("describeAuditLog", () => {
     expect(describeAuditLog(l, userNames)).toBe("Jahr 2026: 42 Dienste generiert");
   });
 
-  it("describes a User email change", () => {
+  it("describes a User email change (legacy shape, e.g. CREATE)", () => {
     const l = log({ entityType: "User", details: JSON.stringify({ email: "new@example.com" }) });
     expect(describeAuditLog(l, userNames)).toBe("E-Mail: new@example.com");
   });
@@ -113,6 +113,68 @@ describe("describeAuditLog", () => {
     expect(
       describeAuditLog(log({ entityType: "User", details: JSON.stringify({ isActive: false }) }), userNames)
     ).toBe("Deaktiviert");
+  });
+
+  it("describes an admin User update via changedFields, without leaking a raw password value", () => {
+    const l = log({
+      entityType: "User",
+      action: "UPDATE",
+      details: JSON.stringify({ changedFields: ["role", "password"] }),
+    });
+    expect(describeAuditLog(l, userNames)).toBe("Geändert: Rolle, Passwort");
+  });
+
+  it("appends the new email when changedFields includes it", () => {
+    const l = log({
+      entityType: "User",
+      action: "UPDATE",
+      details: JSON.stringify({ changedFields: ["email"], email: "new@example.com" }),
+    });
+    expect(describeAuditLog(l, userNames)).toBe("Geändert: E-Mail (new@example.com)");
+  });
+
+  it("describes a User update with no actual field changes", () => {
+    const l = log({ entityType: "User", action: "UPDATE", details: JSON.stringify({ changedFields: [] }) });
+    expect(describeAuditLog(l, userNames)).toBe("Keine Änderungen");
+  });
+
+  it.each([
+    ["changeOwnPassword", "Eigenes Passwort geändert"],
+    ["regenerateIcalToken", "iCal-Token neu generiert"],
+    ["updateOwnNotificationSettings", "Eigene Benachrichtigungseinstellungen geändert"],
+    ["enableTwoFactor", "Zwei-Faktor-Authentifizierung aktiviert"],
+    ["disableTwoFactor", "Zwei-Faktor-Authentifizierung deaktiviert"],
+    ["regenerateBackupCodes", "Wiederherstellungscodes neu generiert"],
+  ])("describes the %s User self-service action in plain text", (action, expected) => {
+    const l = log({ entityType: "User", action: "UPDATE", details: JSON.stringify({ action }) });
+    expect(describeAuditLog(l, userNames)).toBe(expected);
+  });
+
+  it("describes a resent password setup email including the address", () => {
+    const l = log({
+      entityType: "User",
+      action: "UPDATE",
+      details: JSON.stringify({ email: "invite@example.com", action: "passwordSetupEmailSent" }),
+    });
+    expect(describeAuditLog(l, userNames)).toBe("Passwort-Einladungslink erneut gesendet (invite@example.com)");
+  });
+
+  it("describes a test notification with channel and target", () => {
+    const l = log({
+      entityType: "User",
+      action: "SETTINGS",
+      details: JSON.stringify({ action: "testUserNotification", channel: "Telegram", target: "12345" }),
+    });
+    expect(describeAuditLog(l, userNames)).toBe("Test-Benachrichtigung gesendet (Telegram an 12345)");
+  });
+
+  it("describes an iCal include-vacation toggle", () => {
+    const l = log({
+      entityType: "User",
+      action: "UPDATE",
+      details: JSON.stringify({ action: "updateIcalIncludeVacation", includeVacation: true }),
+    });
+    expect(describeAuditLog(l, userNames)).toBe("iCal-Feed-Einstellung geändert: Ferien eingeschlossen");
   });
 
   it("describes a Holiday range import", () => {
@@ -140,6 +202,61 @@ describe("describeAuditLog", () => {
       details: JSON.stringify({ action: "triggerNotificationCheck", queued: 4 }),
     });
     expect(describeAuditLog(l, userNames)).toBe("Benachrichtigungsprüfung manuell ausgelöst (4 eingereiht)");
+  });
+
+  it("describes a retry of failed notifications", () => {
+    const l = log({
+      entityType: "Settings",
+      action: "SETTINGS",
+      details: JSON.stringify({ action: "retryFailedNotifications", count: 2 }),
+    });
+    expect(describeAuditLog(l, userNames)).toBe("Fehlgeschlagene Benachrichtigungen erneut angestossen (2 wiederholt)");
+  });
+
+  it("describes a plain settings save with no extra details", () => {
+    const l = log({ entityType: "Settings", action: "SETTINGS", details: null });
+    expect(describeAuditLog(l, userNames)).toBe("SMTP-/Telegram-Einstellungen aktualisiert");
+  });
+
+  it("describes a SwapRequest broadcast offer", () => {
+    const l = log({
+      entityType: "SwapRequest",
+      action: "CREATE",
+      details: JSON.stringify({ toUserIds: [1, 2], groupId: "g1", dates: ["2026-05-04"] }),
+    });
+    expect(describeAuditLog(l, userNames)).toBe("Angeboten an Alice, Bob (an alle verfügbaren Kolleg:innen): 04.05.2026");
+  });
+
+  it("describes a SwapRequest accept", () => {
+    const l = log({
+      entityType: "SwapRequest",
+      action: "MOVE",
+      details: JSON.stringify({ action: "accept", fromUserId: 1, toUserId: 2, dates: ["2026-05-04"] }),
+    });
+    expect(describeAuditLog(l, userNames)).toBe("Bob übernimmt von Alice: 04.05.2026");
+  });
+
+  it("describes a SwapRequest decline and cancel", () => {
+    expect(
+      describeAuditLog(
+        log({ entityType: "SwapRequest", action: "UPDATE", details: JSON.stringify({ action: "decline" }) }),
+        userNames
+      )
+    ).toBe("Anfrage abgelehnt");
+    expect(
+      describeAuditLog(
+        log({
+          entityType: "SwapRequest",
+          action: "UPDATE",
+          details: JSON.stringify({ action: "cancel", groupId: "g1" }),
+        }),
+        userNames
+      )
+    ).toBe("Anfrage zurückgezogen (Broadcast)");
+  });
+
+  it("maps the SwapRequest entity label", () => {
+    expect(entityLabel("SwapRequest")).toBe("Diensttausch");
   });
 
   it("falls back to JSON.stringify for unrecognized detail shapes", () => {

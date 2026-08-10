@@ -164,19 +164,49 @@ export async function updateUserAction(
   const parsed = userSchema.safeParse(readUserFields(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Ungültige Eingabe." };
 
+  const existing = await prisma.user.findUnique({ where: { id } });
+  if (!existing) return { error: "Benutzer nicht gefunden." };
+
   const password = formData.get("password");
   const data: Record<string, unknown> = { ...parsed.data };
+  let passwordChanged = false;
   if (typeof password === "string" && password.length > 0) {
     const parsedPassword = passwordSchema.safeParse(password);
     if (!parsedPassword.success) {
       return { error: parsedPassword.error.issues[0]?.message ?? "Ungültiges Passwort." };
     }
     data.passwordHash = await hash(password, bcryptRounds);
+    passwordChanged = true;
   }
+
+  // Logs which fields actually changed (never the old/new values of a
+  // password) so the audit log reads as a real trail — e.g. "Passwort
+  // geändert" — instead of every edit looking identical because it always
+  // carried the account's email address.
+  const changedFields: string[] = [];
+  if (parsed.data.name !== existing.name) changedFields.push("name");
+  if (parsed.data.email !== existing.email) changedFields.push("email");
+  if (parsed.data.role !== existing.role) changedFields.push("role");
+  if (parsed.data.rotationOrder !== existing.rotationOrder) changedFields.push("rotationOrder");
+  if (
+    parsed.data.notifyEnabled !== existing.notifyEnabled ||
+    parsed.data.notifyEmail !== existing.notifyEmail ||
+    parsed.data.notifyTelegram !== existing.notifyTelegram ||
+    parsed.data.notifyWeekday !== existing.notifyWeekday ||
+    parsed.data.notifyHour !== existing.notifyHour ||
+    parsed.data.notifyMinute !== existing.notifyMinute ||
+    (parsed.data.telegramChatId ?? null) !== (existing.telegramChatId ?? null)
+  ) {
+    changedFields.push("notifications");
+  }
+  if (passwordChanged) changedFields.push("password");
 
   try {
     await prisma.user.update({ where: { id }, data });
-    await logAudit(session, "UPDATE", "User", id, { email: parsed.data.email });
+    await logAudit(session, "UPDATE", "User", id, {
+      changedFields,
+      ...(changedFields.includes("email") ? { email: parsed.data.email } : {}),
+    });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       return { error: "E-Mail-Adresse wird bereits verwendet." };
