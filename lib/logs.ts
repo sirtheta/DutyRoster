@@ -1,5 +1,14 @@
 import cron from "node-cron";
-import { copyFileSync, existsSync, readdirSync, statSync, truncateSync, unlinkSync } from "fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  truncateSync,
+  unlinkSync,
+} from "fs";
 import { join } from "path";
 import logger from "@/lib/logger";
 import { config } from "@/lib/config";
@@ -77,6 +86,10 @@ export function listLogFiles(dir: string = LOG_DIR): LogFileInfo[] {
  * file instead of a fresh one. Truncating the still-open file resets the
  * append offset to zero, so writes right after this call land at the start
  * of an empty file, exactly like logrotate's `copytruncate`.
+ *
+ * Rotating twice on the same day (a restart plus the cron job, a manual
+ * trigger) appends to the existing target instead of overwriting it, so the
+ * second run can't discard what the first one already rotated out.
  */
 export function rotateLogs(
   options: { dir?: string; maxKeepDays?: number; now?: Date } = {}
@@ -90,9 +103,18 @@ export function rotateLogs(
     // The file being rotated holds the day that just ended, not today.
     const rotatedDate = toDateString(new Date(now.getTime() - 86_400_000));
     target = join(dir, `app-${rotatedDate}.log`);
-    copyFileSync(current, target);
+    const appended = existsSync(target);
+    if (appended) {
+      // copyFileSync would replace the whole file and drop the earlier run's
+      // lines. Read-then-append rather than a stream so the truncate below
+      // still happens synchronously, with no window for new writes to land in
+      // the file after it was read but before it was emptied.
+      appendFileSync(target, readFileSync(current));
+    } else {
+      copyFileSync(current, target);
+    }
     truncateSync(current, 0);
-    log.info({ target }, "Log file rotated");
+    log.info({ target, appended }, "Log file rotated");
   }
 
   pruneOldLogs(dir, options.maxKeepDays ?? config.logs.maxKeepDays, now);
