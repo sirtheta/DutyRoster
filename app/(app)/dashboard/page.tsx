@@ -66,10 +66,23 @@ export default async function DashboardPage({
   const dutyThisWeek = { weekNumber: isoWeekNumber(thisWeek.start), names: namesInRange(thisWeek.start, thisWeek.end) };
   const dutyNextWeek = { weekNumber: isoWeekNumber(nextWeek.start), names: namesInRange(nextWeek.start, nextWeek.end) };
   const yearDutyDates = new Set(yearDuties.map((e) => e.date));
-  const uncovered = uncoveredWeeksInRange(today, `${currentYear}-12-31`, yearDutyDates, holidays).map(
-    (w) => w.weekNumber
-  );
-  const uncoveredDays = partiallyUncoveredDaysInRange(today, `${currentYear}-12-31`, yearDutyDates, holidays);
+  // Coverage is judged over whole weeks, then filtered down to what's still
+  // ahead — starting the range at `today` would clip the current week to
+  // today..Fr, hiding a Mon/Tue duty and reporting an already-covered week as
+  // uncovered. Clamped to 1 January because yearDuties/holidays only hold the
+  // current year, so days before it can't be judged either way.
+  const coverageFrom =
+    thisWeek.start < `${currentYear}-01-01` ? `${currentYear}-01-01` : thisWeek.start;
+  const coverageTo = `${currentYear}-12-31`;
+  const uncovered = uncoveredWeeksInRange(coverageFrom, coverageTo, yearDutyDates, holidays)
+    .filter((w) => w.dates.some((d) => d >= today))
+    .map((w) => w.weekNumber);
+  const uncoveredDays = partiallyUncoveredDaysInRange(
+    coverageFrom,
+    coverageTo,
+    yearDutyDates,
+    holidays
+  ).filter((d) => d >= today);
 
   // Own upcoming S-duties grouped into calendar weeks — the units offered for
   // swapping. Weeks already part of an open request are hidden.
