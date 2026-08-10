@@ -31,14 +31,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const size = statSync(path).size;
-  const stream = Readable.toWeb(createReadStream(path)) as ReadableStream;
+  if (size === 0) return new NextResponse(null, { headers: downloadHeaders(filename, 0) });
+
+  // `app.log` is the file the running process is appending to, and the nightly
+  // rotation truncates it in place. Reading it is therefore a moving target:
+  // a Content-Length taken from statSync is stale the moment a log line is
+  // written, and a mismatched length makes the browser cut the download short
+  // or hang waiting for bytes that never come. So the read is clamped to the
+  // bytes that existed at stat time, and the length header is only sent for
+  // rotated files, which never change again.
+  const stream = Readable.toWeb(createReadStream(path, { end: size - 1 })) as ReadableStream;
+  const isCurrent = filename === "app.log";
 
   return new NextResponse(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Content-Length": String(size),
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    },
+    headers: downloadHeaders(filename, isCurrent ? null : size),
   });
+}
+
+function downloadHeaders(filename: string, size: number | null): HeadersInit {
+  return {
+    "Content-Type": "text/plain; charset=utf-8",
+    ...(size !== null ? { "Content-Length": String(size) } : {}),
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Cache-Control": "no-store",
+  };
 }
