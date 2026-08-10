@@ -33,6 +33,13 @@ function userFormData(fields: Record<string, string> = {}): FormData {
   fd.set("name", "New User");
   fd.set("role", "Editor");
   fd.set("notifyEmail", "on");
+  // Mirrors the real user form, which always submits these (a <select> and
+  // number inputs with defaults) — matches the User model's own schema
+  // defaults so a target created via createTestUser() round-trips as
+  // "unchanged" unless a test explicitly overrides one of them.
+  fd.set("notifyWeekday", "1");
+  fd.set("notifyHour", "7");
+  fd.set("notifyMinute", "0");
   fd.set("password", "test-pw-9x7q");
   for (const [k, v] of Object.entries(fields)) fd.set(k, v);
   return fd;
@@ -196,6 +203,56 @@ describe("users actions", () => {
     expect(res.error).toBeUndefined();
     const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: target.id } });
     expect(await compare("newpassword1", updated.passwordHash)).toBe(true);
+  });
+
+  it("logs which fields changed on a user update, without leaking the raw password", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    const target = await db.prisma.user.create({
+      data: createTestUser({ name: "New User", email: "old@example.com", role: "Editor" }),
+    });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { updateUserAction } = await import("@/app/(app)/users/actions");
+    const fd = userFormData({ email: "updated@example.com" });
+    fd.set("id", String(target.id));
+    const res = await updateUserAction(undefined, fd);
+
+    expect(res.error).toBeUndefined();
+    const audit = await db.prisma.auditLog.findFirstOrThrow({ where: { entityType: "User", action: "UPDATE" } });
+    const details = JSON.parse(audit.details!);
+    expect(details.changedFields).toEqual(["email", "password"]);
+    expect(details.email).toBe("updated@example.com");
+    expect(JSON.stringify(details)).not.toContain("test-pw-9x7q");
+  });
+
+  it("logs no changed fields when a user is saved without any actual change", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    const target = await db.prisma.user.create({
+      data: createTestUser({ name: "New User", email: "same@example.com", role: "Editor" }),
+    });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { updateUserAction } = await import("@/app/(app)/users/actions");
+    const fd = userFormData({ email: "same@example.com" });
+    fd.set("id", String(target.id));
+    fd.delete("password");
+    const res = await updateUserAction(undefined, fd);
+
+    expect(res.error).toBeUndefined();
+    const audit = await db.prisma.auditLog.findFirstOrThrow({ where: { entityType: "User", action: "UPDATE" } });
+    expect(JSON.parse(audit.details!).changedFields).toEqual([]);
+  });
+
+  it("returns an error when updating a non-existent user", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { updateUserAction } = await import("@/app/(app)/users/actions");
+    const fd = userFormData();
+    fd.set("id", "999999");
+    const res = await updateUserAction(undefined, fd);
+
+    expect(res.error).toBe("Benutzer nicht gefunden.");
   });
 
   it("rejects updating a user with a too-short new password", async () => {
