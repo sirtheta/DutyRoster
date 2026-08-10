@@ -204,15 +204,19 @@ export async function bulkSetEntriesAction(
   });
 
   // Record which cells were touched, not just how many — capped so one giant
-  // bulk edit can't balloon a single audit row.
+  // bulk edit can't balloon a single audit row. Nothing touched (deleting a
+  // selection of already-empty cells) writes no row at all: the audit trail is
+  // a change log, and "0 Einträge" entries are pure noise.
   const MAX_AUDITED_CELLS = 1000;
-  await logAudit(session, type === null ? "DELETE" : "UPDATE", "Entry", undefined, {
-    bulk: true,
-    count,
-    type,
-    cells: changedCells.slice(0, MAX_AUDITED_CELLS),
-    ...(changedCells.length > MAX_AUDITED_CELLS ? { cellsTruncated: true } : {}),
-  });
+  if (count > 0) {
+    await logAudit(session, type === null ? "DELETE" : "UPDATE", "Entry", undefined, {
+      bulk: true,
+      count,
+      type,
+      cells: changedCells.slice(0, MAX_AUDITED_CELLS),
+      ...(changedCells.length > MAX_AUDITED_CELLS ? { cellsTruncated: true } : {}),
+    });
+  }
 
   for (const year of new Set(allowed.map((c) => c.date.slice(0, 4)))) {
     revalidatePath(`/calendar/${year}`);

@@ -162,6 +162,25 @@ describe("calendar actions", () => {
     expect(await prisma.entry.count({ where: { userId: admin.id } })).toBe(0);
   });
 
+  it("writes no audit row when a bulk delete hits only empty cells", async () => {
+    const { prisma } = db;
+    const admin = await prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { bulkSetEntriesAction } = await import("@/app/(app)/calendar/[year]/actions");
+    const res = await bulkSetEntriesAction(
+      [
+        { userId: admin.id, date: "2026-05-04" },
+        { userId: admin.id, date: "2026-05-05" },
+      ],
+      null
+    );
+
+    expect(res.error).toBeUndefined();
+    expect(res.count).toBe(0);
+    expect(await prisma.auditLog.count()).toBe(0);
+  });
+
   it("moves an S-Dienst to a free slot and logs the move with from/to details", async () => {
     const { prisma } = db;
     const user = await prisma.user.create({ data: createTestUser({ role: "Editor" }) });
