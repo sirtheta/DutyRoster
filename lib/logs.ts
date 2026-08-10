@@ -6,7 +6,14 @@ import { config } from "@/lib/config";
 import { toDateString } from "@/lib/date";
 import { LOG_DIR } from "@/lib/log-capture";
 
-export { LOG_DIR, LOG_FILE, tee, startLogCapture } from "@/lib/log-capture";
+// Only the path constants are re-exported. `startLogCapture` and `tee`
+// deliberately are not: importing this module constructs the shared pino
+// logger (see `log` below), and pino locks its destination in at that moment
+// — so anyone reaching startLogCapture *through here* would build the logger
+// before patching the streams and silently get an empty app.log again, which
+// is exactly the bug lib/log-capture.ts was split out to prevent. Import it
+// from "@/lib/log-capture" directly.
+export { LOG_DIR, LOG_FILE } from "@/lib/log-capture";
 
 const log = logger.child({ module: "logs" });
 
