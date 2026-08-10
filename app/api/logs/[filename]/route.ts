@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createReadStream, existsSync, statSync } from "fs";
 import { Readable } from "stream";
 import { auth } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import { resolveLogFilePath } from "@/lib/logs";
 
 /**
@@ -29,6 +30,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!path || !existsSync(path)) {
     return NextResponse.json({ error: "Datei nicht gefunden." }, { status: 404 });
   }
+
+  // Downloading exports request metadata about every user, so it belongs in
+  // the trail like any other admin action. Logged before the stream starts:
+  // logAudit never throws, and an aborted download still means the file was
+  // handed out.
+  await logAudit(session, "SETTINGS", "Settings", undefined, {
+    action: "downloadLog",
+    filename,
+  });
 
   const size = statSync(path).size;
   if (size === 0) return new NextResponse(null, { headers: downloadHeaders(filename, 0) });

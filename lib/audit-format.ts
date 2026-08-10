@@ -51,6 +51,7 @@ const USER_ACTION_LABELS: Record<string, string> = {
 const SETTINGS_ACTION_LABELS: Record<string, string> = {
   triggerNotificationCheck: "Benachrichtigungsprüfung manuell ausgelöst",
   retryFailedNotifications: "Fehlgeschlagene Benachrichtigungen erneut angestossen",
+  downloadLog: "Logdatei heruntergeladen",
 };
 
 export function actionLabel(action: string): string {
@@ -183,6 +184,9 @@ export function describeAuditLog(log: AuditLog, userNames: Map<number, string>):
     }
     if (details.action === "retryFailedNotifications") {
       return `${SETTINGS_ACTION_LABELS.retryFailedNotifications} (${details.count} wiederholt)`;
+    }
+    if (details.action === "downloadLog") {
+      return `${SETTINGS_ACTION_LABELS.downloadLog} (${details.filename})`;
     }
     if (Object.keys(details).length === 0) return "SMTP-/Telegram-Einstellungen aktualisiert";
   }
