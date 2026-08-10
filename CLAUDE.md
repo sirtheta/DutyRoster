@@ -87,6 +87,8 @@ npx vitest run tests/unit/rotation.test.ts
 
 **Backups** (`lib/backup.ts`): A nightly cron job (`BACKUP_CRON_SCHEDULE`, default 02:30 server time) writes a consistent SQLite snapshot via `VACUUM INTO` to `backups/` next to the database file (one file per day, `BACKUP_MAX_KEEP_DAYS` retention, default 14; `DISABLE_BACKUP=true` turns it off). In Docker that directory lives inside the data volume, so external syncs of `./data` include the backups.
 
+**Logs** (`lib/logs.ts`): `startLogCapture()` tees `process.stdout`/`process.stderr` to `logs/app.log` in the data volume, so a file ends up with everything `docker logs` would show — not just what happens to go through the shared pino logger — without `lib/logger.ts` itself needing to import `fs`. A nightly job copy-truncates `app.log` to `app-<date>.log` (rename would leave the already-open write stream writing into the renamed file) and prunes files older than `LOG_MAX_KEEP_DAYS` (default 14; `DISABLE_LOG_ROTATION=true` turns rotation off). Admins download files from `/logs` in the UI (`GET /api/logs/[filename]`, filename validated against the exact `app.log` / `app-YYYY-MM-DD.log` shape before touching the filesystem).
+
 **Production startup** (`scripts/startup.js`): In the Docker image, this script applies pending Prisma migrations directly via `better-sqlite3` (no Prisma CLI in the image), seeds the first Admin user from env vars, and ensures a `SystemSettings` row exists before the Next.js server starts.
 
 ### Key Environment Variables
@@ -105,7 +107,8 @@ npx vitest run tests/unit/rotation.test.ts
 | `NOTIFY_MAX_ATTEMPTS` | No | Delivery attempts per notification before giving up, defaults to `3` |
 | `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS` | No | Days to keep notification / audit rows (`0` = forever), default `90` / `365` |
 | `BACKUP_CRON_SCHEDULE` / `BACKUP_MAX_KEEP_DAYS` | No | Nightly DB backup schedule (default `30 2 * * *`) and retention in days (default `14`, `0` = keep all) |
-| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` / `DISABLE_BACKUP` | No | Dev/staging switches to suppress outgoing notifications / backups |
+| `LOG_ROTATE_CRON_SCHEDULE` / `LOG_MAX_KEEP_DAYS` | No | Nightly log rotation schedule (default `35 2 * * *`) and retention in days (default `14`, `0` = keep all) |
+| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` / `DISABLE_BACKUP` / `DISABLE_LOG_ROTATION` | No | Dev/staging switches to suppress outgoing notifications / backups / log rotation |
 
 See `.env.example` for the full list, including session/rate-limit/logging overrides.
 
