@@ -51,7 +51,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col">
-        <ThemeProvider>
+        <ThemeProvider nonce={nonce}>
           {children}
           <Toaster position="bottom-right" richColors closeButton />
         </ThemeProvider>

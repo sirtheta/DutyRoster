@@ -24,6 +24,8 @@ interface CalendarGridProps {
   holidayNameByDate: Record<string, string>;
   /** Workdays that belong to a week with no S-duty at all — highlighted in the date header. */
   uncoveredDates?: Set<string>;
+  /** Workdays without S-duty inside an otherwise-covered week — highlighted separately. */
+  partiallyUncoveredDates?: Set<string>;
   currentUserId: number;
   role: UserRole;
 }
@@ -34,6 +36,7 @@ export function CalendarGrid({
   entries,
   holidayNameByDate,
   uncoveredDates,
+  partiallyUncoveredDates,
   currentUserId,
   role,
 }: CalendarGridProps) {
@@ -240,6 +243,22 @@ export function CalendarGrid({
     el?.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: "smooth" });
   }
 
+  // "Heute"-Button in der Toolbar: bei bereits angezeigtem aktuellem Jahr wird
+  // nur zur heutigen Spalte gescrollt, sonst erst zum Kalender des aktuellen
+  // Jahres navigiert (der Auto-Scroll beim Laden übernimmt dort den Rest).
+  function jumpToToday() {
+    if (!todayDate) {
+      router.push(`/calendar/${new Date().getFullYear()}`);
+      return;
+    }
+    gridRef.current
+      ?.querySelector<HTMLElement>("[data-today-cell]")
+      ?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    mobileGridRef.current
+      ?.querySelector<HTMLElement>("[data-today-cell]")
+      ?.scrollIntoView({ inline: "center", block: "center", behavior: "smooth" });
+  }
+
   function handleDeleteToolClick() {
     if (selection.size > 0) {
       bulkApply(null);
@@ -313,6 +332,7 @@ export function CalendarGrid({
   function renderDateHeaderCell(d: string, keyPrefix: string) {
     const weekend = isWeekend(d);
     const uncovered = uncoveredDates?.has(d) ?? false;
+    const partial = !uncovered && (partiallyUncoveredDates?.has(d) ?? false);
     const today = d === todayDate;
     return (
       <th
@@ -321,10 +341,22 @@ export function CalendarGrid({
         className={cn(
           "min-w-[1.75rem] border-b border-l p-1 text-center font-normal text-muted-foreground",
           (holidayNameByDate[d] || weekend) && "bg-muted",
+          partial && "bg-amber-500/15 text-amber-700 dark:text-amber-400",
           uncovered && "bg-destructive/15 text-destructive",
           today && "bg-primary/20 font-semibold text-primary"
         )}
-        title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : uncovered ? "Ungedeckte Woche" : today ? "Heute" : undefined)}
+        title={
+          holidayNameByDate[d] ??
+          (weekend
+            ? "Wochenende"
+            : uncovered
+              ? "Ungedeckte Woche"
+              : partial
+                ? "Ungedeckter Tag"
+                : today
+                  ? "Heute"
+                  : undefined)
+        }
       >
         <div className="text-[0.65rem] leading-none">{weekdayAbbr(d)}</div>
         <div>{parseInt(d.slice(8, 10), 10)}</div>
@@ -410,6 +442,7 @@ export function CalendarGrid({
         hasWeekendSelected={hasWeekendSelected}
         onCategoryClick={handleCategoryClick}
         onDeleteToolClick={handleDeleteToolClick}
+        onJumpToToday={jumpToToday}
         onCancel={() => {
           clearSelection();
           setActiveTool(null);
@@ -439,6 +472,7 @@ export function CalendarGrid({
               {dates.map((d) => {
                 const weekend = isWeekend(d);
                 const uncovered = uncoveredDates?.has(d) ?? false;
+                const partial = !uncovered && (partiallyUncoveredDates?.has(d) ?? false);
                 const today = d === todayDate;
                 return (
                   <th
@@ -447,11 +481,23 @@ export function CalendarGrid({
                     className={cn(
                       "min-w-[1.75rem] border-b border-l p-1 text-center font-normal text-muted-foreground",
                       (holidayNameByDate[d] || weekend) && "bg-muted",
+                      partial && "bg-amber-500/15 text-amber-700 dark:text-amber-400",
                       uncovered && "bg-destructive/15 text-destructive",
                       today && "bg-primary/20 font-semibold text-primary",
                       d.slice(5) === dates[0].slice(5) && "border-l-2"
                     )}
-                    title={holidayNameByDate[d] ?? (weekend ? "Wochenende" : uncovered ? "Ungedeckte Woche" : today ? "Heute" : undefined)}
+                    title={
+                      holidayNameByDate[d] ??
+                      (weekend
+                        ? "Wochenende"
+                        : uncovered
+                          ? "Ungedeckte Woche"
+                          : partial
+                            ? "Ungedeckter Tag"
+                            : today
+                              ? "Heute"
+                              : undefined)
+                    }
                   >
                     <div className="text-[0.65rem] leading-none">{weekdayAbbr(d)}</div>
                     <div>{parseInt(d.slice(8, 10), 10)}</div>

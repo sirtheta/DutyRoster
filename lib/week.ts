@@ -18,6 +18,28 @@ export interface UncoveredWeek {
   dates: string[];
 }
 
+/** A Mon–Fri calendar week, clipped to a queried range and with holidays removed. */
+interface WorkWeek {
+  /** Monday of the week (YYYY-MM-DD), even if it falls outside the range. */
+  start: string;
+  /** Non-holiday workdays of the week that fall within the range. */
+  workDays: string[];
+}
+
+/** Splits [`from`, `to`] into its overlapping Mon–Fri calendar weeks. */
+function workWeeksInRange(from: string, to: string, holidays: Set<string>): WorkWeek[] {
+  const result: WorkWeek[] = [];
+  let monday = weekRange(parseDate(from)!).start;
+  while (monday <= to) {
+    const days = [0, 1, 2, 3, 4]
+      .map((i) => addDays(monday, i))
+      .filter((d) => d >= from && d <= to);
+    result.push({ start: monday, workDays: days.filter((d) => !holidays.has(d)) });
+    monday = addDays(monday, 7);
+  }
+  return result;
+}
+
 /**
  * The Mon–Fri weeks overlapping [`from`, `to`] (inclusive, YYYY-MM-DD) that
  * have at least one non-holiday workday within that range but no S-duty on
@@ -32,16 +54,34 @@ export function uncoveredWeeksInRange(
   holidays: Set<string>
 ): UncoveredWeek[] {
   const result: UncoveredWeek[] = [];
-  let monday = weekRange(parseDate(from)!).start;
-  while (monday <= to) {
-    const days = [0, 1, 2, 3, 4]
-      .map((i) => addDays(monday, i))
-      .filter((d) => d >= from && d <= to);
-    const workDays = days.filter((d) => !holidays.has(d));
+  for (const { start, workDays } of workWeeksInRange(from, to, holidays)) {
     if (workDays.length > 0 && !workDays.some((d) => sDutyDates.has(d))) {
-      result.push({ weekNumber: isoWeekNumber(workDays[0]), start: monday, dates: workDays });
+      result.push({ weekNumber: isoWeekNumber(workDays[0]), start, dates: workDays });
     }
-    monday = addDays(monday, 7);
+  }
+  return result;
+}
+
+/**
+ * Individual workdays within [`from`, `to`] that have no S-duty even though
+ * their calendar week isn't reported by `uncoveredWeeksInRange` — i.e. the
+ * week has duty on *some* days but a gap on others (e.g. a week split
+ * between two colleagues that leaves one day uncovered, or a single S-entry
+ * moved/deleted). Weeks with no duty at all are left to
+ * `uncoveredWeeksInRange` so the two never double-report the same days.
+ */
+export function partiallyUncoveredDaysInRange(
+  from: string,
+  to: string,
+  sDutyDates: Set<string>,
+  holidays: Set<string>
+): string[] {
+  const result: string[] = [];
+  for (const { workDays } of workWeeksInRange(from, to, holidays)) {
+    const coveredCount = workDays.filter((d) => sDutyDates.has(d)).length;
+    if (coveredCount > 0 && coveredCount < workDays.length) {
+      result.push(...workDays.filter((d) => !sDutyDates.has(d)));
+    }
   }
   return result;
 }

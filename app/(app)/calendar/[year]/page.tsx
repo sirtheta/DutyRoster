@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { requireSession } from "@/lib/permissions";
 import { rosterForYearWhere } from "@/lib/users";
-import { uncoveredWeeksInRange } from "@/lib/week";
+import { partiallyUncoveredDaysInRange, uncoveredWeeksInRange } from "@/lib/week";
 import { CalendarGrid } from "@/components/calendar-grid";
 import { AutomationPanel } from "@/components/automation-panel";
 import { UncoveredWeeksBanner } from "@/components/uncovered-weeks-banner";
@@ -45,6 +45,9 @@ export default async function CalendarPage({
     holidayDates
   );
   const uncoveredDates = new Set(uncoveredWeeks.flatMap((w) => w.dates));
+  const partiallyUncoveredDates = new Set(
+    partiallyUncoveredDaysInRange(`${year}-01-01`, `${year}-12-31`, sDutyDates, holidayDates)
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -69,7 +72,10 @@ export default async function CalendarPage({
 
       {session.user.role === "Admin" && <AutomationPanel year={year} />}
 
-      <UncoveredWeeksBanner weekNumbers={uncoveredWeeks.map((w) => w.weekNumber)} />
+      <UncoveredWeeksBanner
+        weekNumbers={uncoveredWeeks.map((w) => w.weekNumber)}
+        partialDates={[...partiallyUncoveredDates].sort()}
+      />
 
       <CalendarGrid
         year={year}
@@ -77,6 +83,7 @@ export default async function CalendarPage({
         entries={entries}
         holidayNameByDate={Object.fromEntries(holidayNameByDate)}
         uncoveredDates={uncoveredDates}
+        partiallyUncoveredDates={partiallyUncoveredDates}
         currentUserId={Number(session.user.id)}
         role={session.user.role}
       />

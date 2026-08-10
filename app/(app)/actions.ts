@@ -8,7 +8,7 @@ import { NotifyChannel } from "@prisma/client";
 import { signOut } from "@/lib/auth";
 import { requireSession } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { bcryptRounds } from "@/lib/password";
+import { bcryptRounds, passwordSchema } from "@/lib/password";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
 import {
@@ -90,8 +90,9 @@ export async function changeOwnPasswordAction(
   if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
     return { error: "Ungültige Eingabe." };
   }
-  if (newPassword.length < 8) {
-    return { error: "Neues Passwort muss mindestens 8 Zeichen lang sein." };
+  const parsedPassword = passwordSchema.safeParse(newPassword);
+  if (!parsedPassword.success) {
+    return { error: parsedPassword.error.issues[0]?.message ?? "Ungültiges Passwort." };
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId } });

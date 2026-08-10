@@ -7,20 +7,45 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { bcryptRounds } from "@/lib/password";
+import { bcryptRounds, passwordSchema } from "@/lib/password";
 import { Prisma, UserRole, NotifyChannel } from "@prisma/client";
 import { parseDate, toDateString } from "@/lib/date";
 import { notifyCalendarChange } from "@/lib/calendar-events";
 import { generateAutomationAction } from "@/app/(app)/calendar/[year]/actions";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
+import { createPasswordResetToken } from "@/lib/password-reset";
+import { appOrigin } from "@/lib/origin";
+import { emailSchema } from "@/lib/normalize-email";
 import logger from "@/lib/logger";
 
 const log = logger.child({ module: "users" });
 
+/**
+ * Sends the "set your password" link a freshly created (or re-invited) user
+ * needs, since they have no password of their own yet. Reuses the same
+ * reset-token/reset-password machinery as self-service forgot-password, so
+ * there is only one place that issues and consumes these links.
+ */
+async function sendInviteEmail(userId: number, name: string, email: string): Promise<void> {
+  const token = await createPasswordResetToken(prisma, userId);
+  const link = `${await appOrigin()}/reset-password?token=${token}`;
+  const settings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+  if (!settings) throw new Error("SMTP nicht konfiguriert (keine SystemSettings).");
+  await sendPlanEmail(
+    settings,
+    email,
+    "Sanitätsplaner: Konto erstellt",
+    `Hallo ${name}\n\n` +
+      `Für dich wurde ein Konto im Sanitätsplaner angelegt. Über folgenden Link kannst du dein Passwort setzen (gültig für 1 Stunde):\n` +
+      `${link}\n\n` +
+      `Falls dir das nicht bekannt vorkommt, wende dich an den Administrator.`
+  );
+}
+
 const userSchema = z
   .object({
-    email: z.string().email(),
+    email: emailSchema,
     name: z.string().min(1),
     role: z.enum(UserRole),
     rotationOrder: z.coerce.number().int().min(0).default(0),
@@ -72,14 +97,23 @@ export async function createUserAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Ungültige Eingabe." };
 
   const password = formData.get("password");
-  if (typeof password !== "string" || password.length < 8) {
-    return { error: "Passwort muss mindestens 8 Zeichen lang sein." };
+  if (typeof password !== "string") return { error: "Ungültige Eingabe." };
+  // An empty password means the user gets an invite link and sets their own,
+  // so only a non-empty value needs to pass the strength check.
+  if (password) {
+    const parsedPassword = passwordSchema.safeParse(password);
+    if (!parsedPassword.success) {
+      return { error: parsedPassword.error.issues[0]?.message ?? "Ungültiges Passwort." };
+    }
   }
 
-  const passwordHash = await hash(password, bcryptRounds);
+  // No password given: the user logs in via the invite link instead, so the
+  // stored hash only needs to be unguessable, never entered by anyone.
+  const passwordHash = await hash(password || randomBytes(32).toString("hex"), bcryptRounds);
 
+  let created: { id: number; name: string; email: string };
   try {
-    const user = await prisma.$transaction(async (tx) => {
+    created = await prisma.$transaction(async (tx) => {
       // rotationOrder is a continuous insertion index, not a raw stored
       // value: make room for the new user by bumping everyone from that
       // position onward, so a new user at 0 pushes the rest back instead
@@ -98,13 +132,24 @@ export async function createUserAction(
         },
       });
     });
-    await logAudit(session, "CREATE", "User", user.id, { email: user.email });
+    await logAudit(session, "CREATE", "User", created.id, { email: created.email });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       return { error: "E-Mail-Adresse wird bereits verwendet." };
     }
     log.error({ err }, "Failed to create user");
     return { error: "Benutzer konnte nicht erstellt werden." };
+  }
+
+  if (!password) {
+    try {
+      await sendInviteEmail(created.id, created.name, created.email);
+    } catch (err) {
+      // The account exists either way; the admin can resend the invite
+      // from the row menu, same as a broken audit write never blocks the
+      // underlying mutation (see logAudit).
+      log.error({ err, userId: created.id }, "Failed to send account invite email");
+    }
   }
 
   revalidatePath("/users");
@@ -120,16 +165,49 @@ export async function updateUserAction(
   const parsed = userSchema.safeParse(readUserFields(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Ungültige Eingabe." };
 
+  const existing = await prisma.user.findUnique({ where: { id } });
+  if (!existing) return { error: "Benutzer nicht gefunden." };
+
   const password = formData.get("password");
   const data: Record<string, unknown> = { ...parsed.data };
+  let passwordChanged = false;
   if (typeof password === "string" && password.length > 0) {
-    if (password.length < 8) return { error: "Passwort muss mindestens 8 Zeichen lang sein." };
+    const parsedPassword = passwordSchema.safeParse(password);
+    if (!parsedPassword.success) {
+      return { error: parsedPassword.error.issues[0]?.message ?? "Ungültiges Passwort." };
+    }
     data.passwordHash = await hash(password, bcryptRounds);
+    passwordChanged = true;
   }
+
+  // Logs which fields actually changed (never the old/new values of a
+  // password) so the audit log reads as a real trail — e.g. "Passwort
+  // geändert" — instead of every edit looking identical because it always
+  // carried the account's email address.
+  const changedFields: string[] = [];
+  if (parsed.data.name !== existing.name) changedFields.push("name");
+  if (parsed.data.email !== existing.email) changedFields.push("email");
+  if (parsed.data.role !== existing.role) changedFields.push("role");
+  if (parsed.data.rotationOrder !== existing.rotationOrder) changedFields.push("rotationOrder");
+  if (
+    parsed.data.notifyEnabled !== existing.notifyEnabled ||
+    parsed.data.notifyEmail !== existing.notifyEmail ||
+    parsed.data.notifyTelegram !== existing.notifyTelegram ||
+    parsed.data.notifyWeekday !== existing.notifyWeekday ||
+    parsed.data.notifyHour !== existing.notifyHour ||
+    parsed.data.notifyMinute !== existing.notifyMinute ||
+    (parsed.data.telegramChatId ?? null) !== (existing.telegramChatId ?? null)
+  ) {
+    changedFields.push("notifications");
+  }
+  if (passwordChanged) changedFields.push("password");
 
   try {
     await prisma.user.update({ where: { id }, data });
-    await logAudit(session, "UPDATE", "User", id, { email: parsed.data.email });
+    await logAudit(session, "UPDATE", "User", id, {
+      changedFields,
+      ...(changedFields.includes("email") ? { email: parsed.data.email } : {}),
+    });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       return { error: "E-Mail-Adresse wird bereits verwendet." };
@@ -238,5 +316,27 @@ export async function sendUserTestNotificationAction(
   }
 
   await logAudit(session, "SETTINGS", "User", undefined, { action: "testUserNotification", channel, target });
+  return { success: true };
+}
+
+/**
+ * (Re-)sends the "set your password" link to a user — for an invite that
+ * bounced, or any time an admin wants to hand password control back to the
+ * user instead of typing one in themselves.
+ */
+export async function sendPasswordSetupEmailAction(id: number): Promise<{ error?: string; success?: boolean }> {
+  const session = await requireAdmin();
+
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) return { error: "Benutzer nicht gefunden." };
+
+  try {
+    await sendInviteEmail(user.id, user.name, user.email);
+  } catch (err) {
+    log.error({ err, userId: id }, "Failed to send password setup email");
+    return { error: "E-Mail konnte nicht gesendet werden. Bitte SMTP-Einstellungen prüfen." };
+  }
+
+  await logAudit(session, "UPDATE", "User", id, { email: user.email, action: "passwordSetupEmailSent" });
   return { success: true };
 }

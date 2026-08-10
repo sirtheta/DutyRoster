@@ -108,6 +108,14 @@ describe("auth.ts – authorize()", () => {
     expect(resetRateLimit).toHaveBeenCalled();
   });
 
+  it("looks up the user by a trimmed, lowercased email regardless of input casing", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(baseUser as never);
+    vi.mocked(compare).mockResolvedValue(true as never);
+    const result = await callAuthorize({ email: "  User@Test.CH  ", password: "correct" });
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: "user@test.ch" } });
+    expect(result).toMatchObject({ email: "user@test.ch" });
+  });
+
   it("throws a two_factor_required error when 2FA is enabled but no code is given", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       ...baseUser,

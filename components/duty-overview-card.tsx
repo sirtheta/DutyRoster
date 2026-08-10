@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDateCH } from "@/lib/date";
 
 export interface DutyWeekInfo {
   weekNumber: number;
@@ -9,10 +10,13 @@ export function DutyOverviewCard({
   thisWeek,
   nextWeek,
   uncoveredWeekNumbers,
+  uncoveredDates = [],
 }: {
   thisWeek: DutyWeekInfo;
   nextWeek: DutyWeekInfo;
   uncoveredWeekNumbers: number[];
+  /** Individual uncovered workdays (YYYY-MM-DD) within an otherwise-covered week. */
+  uncoveredDates?: string[];
 }) {
   const renderNames = (info: DutyWeekInfo) =>
     info.names.length > 0 ? (
@@ -43,6 +47,14 @@ export function DutyOverviewCard({
             "keine"
           )}
         </p>
+        {uncoveredDates.length > 0 && (
+          <p className="text-muted-foreground">
+            Ungedeckte Tage bis Jahresende:{" "}
+            <span className="font-medium text-amber-700 dark:text-amber-400">
+              {uncoveredDates.map(formatDateCH).join(", ")}
+            </span>
+          </p>
+        )}
       </CardContent>
     </Card>
   );
