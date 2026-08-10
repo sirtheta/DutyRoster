@@ -243,6 +243,22 @@ export function CalendarGrid({
     el?.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: "smooth" });
   }
 
+  // "Heute"-Button in der Toolbar: bei bereits angezeigtem aktuellem Jahr wird
+  // nur zur heutigen Spalte gescrollt, sonst erst zum Kalender des aktuellen
+  // Jahres navigiert (der Auto-Scroll beim Laden übernimmt dort den Rest).
+  function jumpToToday() {
+    if (!todayDate) {
+      router.push(`/calendar/${new Date().getFullYear()}`);
+      return;
+    }
+    gridRef.current
+      ?.querySelector<HTMLElement>("[data-today-cell]")
+      ?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    mobileGridRef.current
+      ?.querySelector<HTMLElement>("[data-today-cell]")
+      ?.scrollIntoView({ inline: "center", block: "center", behavior: "smooth" });
+  }
+
   function handleDeleteToolClick() {
     if (selection.size > 0) {
       bulkApply(null);
@@ -426,6 +442,7 @@ export function CalendarGrid({
         hasWeekendSelected={hasWeekendSelected}
         onCategoryClick={handleCategoryClick}
         onDeleteToolClick={handleDeleteToolClick}
+        onJumpToToday={jumpToToday}
         onCancel={() => {
           clearSelection();
           setActiveTool(null);
