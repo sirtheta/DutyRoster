@@ -2,6 +2,7 @@
 
 import type { RefObject } from "react";
 import type { EntryType } from "@prisma/client";
+import { CalendarDays } from "lucide-react";
 import { TYPE_INFO, ENTRY_TYPES } from "@/lib/entry-types";
 import { Button } from "@/components/ui/button";
 import type { PaintTool } from "./types";
@@ -17,6 +18,7 @@ export interface CalendarToolbarProps {
   hasWeekendSelected: boolean;
   onCategoryClick: (type: EntryType) => void;
   onDeleteToolClick: () => void;
+  onJumpToToday: () => void;
   onCancel: () => void;
 }
 
@@ -35,6 +37,7 @@ export function CalendarToolbar({
   hasWeekendSelected,
   onCategoryClick,
   onDeleteToolClick,
+  onJumpToToday,
   onCancel,
 }: CalendarToolbarProps) {
   return (
@@ -42,15 +45,28 @@ export function CalendarToolbar({
       ref={toolbarRef}
       className="sticky top-14 z-20 flex flex-col gap-2 rounded-md border bg-background p-2 shadow-sm"
     >
-      <span className="text-sm tabular-nums text-muted-foreground">
-        {displaySize > 0
-          ? `${displaySize} Zelle(n) ausgewählt`
-          : activeTool === "DELETE"
-            ? "Zellen anklicken zum Löschen"
-            : activeTool !== null
-              ? `Zellen anklicken zum Einfärben: ${TYPE_INFO[activeTool].label}`
-              : "Legende"}
-      </span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm tabular-nums text-muted-foreground">
+          {displaySize > 0
+            ? `${displaySize} Zelle(n) ausgewählt`
+            : activeTool === "DELETE"
+              ? "Zellen anklicken zum Löschen"
+              : activeTool !== null
+                ? `Zellen anklicken zum Einfärben: ${TYPE_INFO[activeTool].label}`
+                : "Legende"}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={onJumpToToday}
+          title="Zur heutigen Spalte springen"
+        >
+          <CalendarDays className="h-4 w-4" />
+          Heute
+        </Button>
+      </div>
       <span className="hidden text-xs text-muted-foreground sm:block">
         Tipp: Shift + Ziehen markiert mehrere Zellen.
       </span>
