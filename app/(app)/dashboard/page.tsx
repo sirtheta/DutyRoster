@@ -5,7 +5,7 @@ import { rosterForYearWhere } from "@/lib/users";
 import { ENTRY_TYPES } from "@/lib/entry-types";
 import { formatDateCH, parseDate, toDateString } from "@/lib/date";
 import { addDays } from "@/lib/date";
-import { isoWeekNumber, uncoveredWeeksInRange, weekRange } from "@/lib/week";
+import { isoWeekNumber, partiallyUncoveredDaysInRange, uncoveredWeeksInRange, weekRange } from "@/lib/week";
 import { holidaySetForYear } from "@/lib/holidays";
 import { DashboardChart } from "@/components/dashboard-chart";
 import { DutyOverviewCard } from "@/components/duty-overview-card";
@@ -65,12 +65,11 @@ export default async function DashboardPage({
   ];
   const dutyThisWeek = { weekNumber: isoWeekNumber(thisWeek.start), names: namesInRange(thisWeek.start, thisWeek.end) };
   const dutyNextWeek = { weekNumber: isoWeekNumber(nextWeek.start), names: namesInRange(nextWeek.start, nextWeek.end) };
-  const uncovered = uncoveredWeeksInRange(
-    today,
-    `${currentYear}-12-31`,
-    new Set(yearDuties.map((e) => e.date)),
-    holidays
-  ).map((w) => w.weekNumber);
+  const yearDutyDates = new Set(yearDuties.map((e) => e.date));
+  const uncovered = uncoveredWeeksInRange(today, `${currentYear}-12-31`, yearDutyDates, holidays).map(
+    (w) => w.weekNumber
+  );
+  const uncoveredDays = partiallyUncoveredDaysInRange(today, `${currentYear}-12-31`, yearDutyDates, holidays);
 
   // Own upcoming S-duties grouped into calendar weeks — the units offered for
   // swapping. Weeks already part of an open request are hidden.
@@ -160,6 +159,7 @@ export default async function DashboardPage({
         thisWeek={dutyThisWeek}
         nextWeek={dutyNextWeek}
         uncoveredWeekNumbers={uncovered}
+        uncoveredDates={uncoveredDays}
       />
       <DashboardChart data={data} year={year} />
       <SwapRequestsCard

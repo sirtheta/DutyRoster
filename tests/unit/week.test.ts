@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { weekRange, isoWeekNumber, uncoveredWeeksInRange } from "@/lib/week";
+import { weekRange, isoWeekNumber, uncoveredWeeksInRange, partiallyUncoveredDaysInRange } from "@/lib/week";
 
 describe("weekRange", () => {
   it("returns Monday..Sunday for a mid-week date", () => {
@@ -63,6 +63,34 @@ describe("uncoveredWeeksInRange", () => {
     const result = uncoveredWeeksInRange("2026-12-28", "2026-12-31", new Set(), new Set());
     expect(result).toHaveLength(1);
     expect(result[0].dates).toEqual(["2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31"]);
+  });
+});
+
+describe("partiallyUncoveredDaysInRange", () => {
+  it("reports the uncovered days of a week that has duty on some days but not all", () => {
+    // 2026-11-30 is Monday of KW 49; duty only on Mon+Tue leaves Wed–Fri gaps.
+    const duties = new Set(["2026-11-30", "2026-12-01"]);
+    const result = partiallyUncoveredDaysInRange("2026-11-30", "2026-12-04", duties, new Set());
+    expect(result).toEqual(["2026-12-02", "2026-12-03", "2026-12-04"]);
+  });
+
+  it("does not report a week with no duty at all (that's uncoveredWeeksInRange's job)", () => {
+    const result = partiallyUncoveredDaysInRange("2026-11-30", "2026-12-04", new Set(), new Set());
+    expect(result).toEqual([]);
+  });
+
+  it("does not report a fully-covered week", () => {
+    const duties = new Set(["2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04"]);
+    const result = partiallyUncoveredDaysInRange("2026-11-30", "2026-12-04", duties, new Set());
+    expect(result).toEqual([]);
+  });
+
+  it("ignores holidays when deciding whether a week is partially covered", () => {
+    // Monday is a holiday, Tuesday has duty, Wed–Fri don't — still partial.
+    const duties = new Set(["2026-12-01"]);
+    const holidays = new Set(["2026-11-30"]);
+    const result = partiallyUncoveredDaysInRange("2026-11-30", "2026-12-04", duties, holidays);
+    expect(result).toEqual(["2026-12-02", "2026-12-03", "2026-12-04"]);
   });
 });
 
