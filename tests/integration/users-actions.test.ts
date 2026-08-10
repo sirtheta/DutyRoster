@@ -319,6 +319,21 @@ describe("users actions", () => {
     expect(JSON.parse(audit.details!)).toMatchObject({ isActive: false });
   });
 
+  it("deactivating a user clears any exit date so login is blocked immediately", async () => {
+    const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+    const target = await db.prisma.user.create({
+      data: createTestUser({ email: "target@example.com", isActive: true, exitDate: "2099-06-15" }),
+    });
+    currentSession = sessionFor(admin.id, "Admin");
+
+    const { toggleActiveAction } = await import("@/app/(app)/users/actions");
+    await toggleActiveAction(target.id, false);
+
+    const updated = await db.prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(updated.isActive).toBe(false);
+    expect(updated.exitDate).toBeNull();
+  });
+
   it("reactivating a user clears a previously set exit date", async () => {
     const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
     const target = await db.prisma.user.create({

@@ -223,7 +223,10 @@ export async function updateUserAction(
 export async function toggleActiveAction(id: number, isActive: boolean): Promise<void> {
   const session = await requireAdmin();
   // Reactivating clears a previous exit date — the user is employed again.
-  await prisma.user.update({ where: { id }, data: { isActive, exitDate: isActive ? null : undefined } });
+  // Deactivating clears it too: this toggle is the immediate lockout (unlike
+  // terminateUserAction, which leaves login open until the exit date), and a
+  // lingering future exitDate would keep `canSignIn` returning true.
+  await prisma.user.update({ where: { id }, data: { isActive, exitDate: null } });
   await logAudit(session, "UPDATE", "User", id, { isActive });
   revalidatePath("/users");
 }
