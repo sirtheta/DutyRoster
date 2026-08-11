@@ -93,6 +93,100 @@ export function zonedParts(
   };
 }
 
+/**
+ * Formatters are comparatively expensive to construct and these run on every
+ * log line, so keep one per timezone.
+ */
+const timestampFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function timestampFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = timestampFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      fractionalSecondDigits: 3,
+      timeZoneName: "longOffset",
+    });
+    timestampFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
+/**
+ * A moment as an ISO-8601 timestamp in `timeZone`, with the zone's UTC offset
+ * kept (`2026-08-11T14:23:45.123+02:00`). The offset is what makes this safe
+ * to write into log files: local time alone is ambiguous across the DST
+ * change, when the same wall-clock hour occurs twice.
+ */
+export function zonedTimestamp(date: Date, timeZone: string): string {
+  const parts = timestampFormatter(timeZone).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  // "longOffset" renders UTC itself as a bare "GMT", everything else as
+  // "GMT+02:00".
+  const offset = get("timeZoneName").replace("GMT", "") || "+00:00";
+  return (
+    `${get("year")}-${get("month")}-${get("day")}` +
+    `T${get("hour")}:${get("minute")}:${get("second")}.${get("fractionalSecond")}${offset}`
+  );
+}
+
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** How far `timeZone` is ahead of UTC at a given instant, in milliseconds. */
+function zoneOffsetMs(instant: Date, timeZone: string): number {
+  let formatter = offsetFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    offsetFormatters.set(timeZone, formatter);
+  }
+  const parts = formatter.formatToParts(instant);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parseInt(parts.find((p) => p.type === type)?.value ?? "0", 10);
+  const asIfUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second")
+  );
+  // Sub-second precision is irrelevant here and formatToParts drops it, so
+  // compare against a whole second of the instant.
+  return asIfUtc - Math.floor(instant.getTime() / 1000) * 1000;
+}
+
+/**
+ * The instant at which the calendar day `YYYY-MM-DD` begins in `timeZone` —
+ * i.e. what a DB query has to compare a UTC-stored timestamp against to mean
+ * "from local midnight onwards".
+ */
+export function zonedDayStart(dateStr: string, timeZone: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const asIfUtc = Date.UTC(y, m - 1, d);
+  // The offset has to be read at the resulting instant, not at the UTC guess:
+  // near a DST switch the two can differ by an hour. One correction pass
+  // settles it, since the guess is at most an hour off.
+  const firstGuess = asIfUtc - zoneOffsetMs(new Date(asIfUtc), timeZone);
+  return new Date(asIfUtc - zoneOffsetMs(new Date(firstGuess), timeZone));
+}
+
 export function isValidTimeZone(timeZone: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone });
