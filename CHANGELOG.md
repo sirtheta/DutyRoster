@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.15](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.14...DutyRoster-v0.4.15) (2026-08-11)
+
+
+### Bug Fixes
+
+* **app:** decide "today" in the app timezone, not the server's ([#93](https://github.com/sirtheta/DutyRoster/issues/93)) ([ea264ba](https://github.com/sirtheta/DutyRoster/commit/ea264ba487aa9064e611e0008fd1bd738e454a18))
+* **logs:** show audit and log timestamps in the app timezone ([#92](https://github.com/sirtheta/DutyRoster/issues/92)) ([e31093b](https://github.com/sirtheta/DutyRoster/commit/e31093bfaac407f87db13ac73ec79f0efad02a6e))
+
 ## [0.4.14](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.13...DutyRoster-v0.4.14) (2026-08-10)
 
 
