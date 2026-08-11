@@ -89,6 +89,8 @@ npx vitest run tests/unit/rotation.test.ts
 
 **Logs** (`lib/log-capture.ts`, `lib/logs.ts`): `startLogCapture()` tees `process.stdout`/`process.stderr` to `logs/app.log` in the data volume, so a file ends up with everything `docker logs` would show — not just what happens to go through the shared pino logger. It lives in its own `lib/log-capture.ts`, with no import of `lib/logger`, and `instrumentation.ts` calls it as the very first thing in `register()`: pino writes straight to file descriptor 1/2 via a `SonicBoom`, bypassing `process.stdout`/`stderr.write` entirely, *unless* those methods were already reassigned before the first `pino()` call anywhere in the process (`hasBeenTampered`) — importing `lib/logs` (or anything else that imports `lib/logger`) before `startLogCapture()` runs silently breaks capture, with nothing but an empty downloaded file to show for it. A nightly job copy-truncates `app.log` to `app-<date>.log` (rename would leave the already-open write stream writing into the renamed file) and prunes files older than `LOG_MAX_KEEP_DAYS` (default 14; `DISABLE_LOG_ROTATION=true` turns rotation off). Admins download files from `/logs` in the UI (`GET /api/logs/[filename]`, filename validated against the exact `app.log` / `app-YYYY-MM-DD.log` shape before touching the filesystem).
 
+**Time display** (`config.timezone`, from `APP_TIMEZONE` → `TZ` → `Europe/Zurich`): timestamps are stored in UTC everywhere (Prisma/SQLite) and rendered in the app timezone — the audit view, pino's `time` field in `app.log` (ISO-8601 *with* the UTC offset, `zonedTimestamp` in `lib/date.ts`), and the local calendar day rotated log filenames are named after. Formatting a stored `DateTime` for the UI means passing `timeZone: config.timezone` explicitly and filtering by day/year via `zonedDayStart`; relying on the server's own TZ shows UTC in any container that doesn't set `TZ`.
+
 **Production startup** (`scripts/startup.js`): In the Docker image, this script applies pending Prisma migrations directly via `better-sqlite3` (no Prisma CLI in the image), seeds the first Admin user from env vars, and ensures a `SystemSettings` row exists before the Next.js server starts.
 
 ### Key Environment Variables
@@ -103,7 +105,8 @@ npx vitest run tests/unit/rotation.test.ts
 | `ADMIN_PASSWORD_HASH` | First run | Pre-hashed bcrypt alternative to `ADMIN_PASSWORD` |
 | `DEFAULT_CANTON` | No | ISO canton code for `date-holidays` seeding, defaults to `BE` |
 | `NOTIFY_CRON_SCHEDULE` | No | Cron expression for the due-notification check, defaults to `*/5 * * * *` |
-| `NOTIFY_TIMEZONE` | No | IANA timezone for users' notification weekday/hour, defaults to `Europe/Zurich` |
+| `APP_TIMEZONE` | No | IANA timezone the app displays and logs times in, falls back to `TZ`, then `Europe/Zurich` |
+| `NOTIFY_TIMEZONE` | No | IANA timezone for users' notification weekday/hour, defaults to `APP_TIMEZONE` |
 | `NOTIFY_MAX_ATTEMPTS` | No | Delivery attempts per notification before giving up, defaults to `3` |
 | `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS` | No | Days to keep notification / audit rows (`0` = forever), default `90` / `365` |
 | `BACKUP_CRON_SCHEDULE` / `BACKUP_MAX_KEEP_DAYS` | No | Nightly DB backup schedule (default `30 2 * * *`) and retention in days (default `14`, `0` = keep all) |

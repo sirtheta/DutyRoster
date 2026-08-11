@@ -21,9 +21,11 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
-      # Server timezone (log timestamps etc.). Notification scheduling uses
-      # NOTIFY_TIMEZONE (default Europe/Zurich) and works regardless of TZ.
+      # Server timezone. The app displays and logs times in APP_TIMEZONE,
+      # which falls back to TZ and then to Europe/Zurich, so setting either
+      # one is enough; notification scheduling can differ via NOTIFY_TIMEZONE.
       TZ: ${TZ:-Europe/Zurich}
+      APP_TIMEZONE: ${APP_TIMEZONE:-}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/auth/session"]
       interval: 30s

@@ -12,7 +12,7 @@ import {
 import { join } from "path";
 import logger from "@/lib/logger";
 import { config } from "@/lib/config";
-import { toDateString } from "@/lib/date";
+import { isValidTimeZone, zonedParts } from "@/lib/date";
 import { LOG_DIR } from "@/lib/log-capture";
 
 // Only the path constants are re-exported. `startLogCapture` and `tee`
@@ -31,6 +31,16 @@ const globalForScheduler = globalThis as unknown as {
 };
 
 const ROTATED_LOG_RE = /^app-(\d{4}-\d{2}-\d{2})\.log$/;
+
+// Rotated filenames name a calendar day, so they have to agree with the
+// timezone the timestamps inside the file are written in (lib/logger) — read
+// from the app timezone rather than the server's own TZ.
+const TZ = isValidTimeZone(config.timezone) ? config.timezone : "UTC";
+
+/** The `YYYY-MM-DD` calendar day a moment falls on, in the app timezone. */
+function localDay(date: Date): string {
+  return zonedParts(date, TZ).date;
+}
 
 export interface LogFileInfo {
   /** Filename only, safe to use as a URL path segment. */
@@ -53,7 +63,7 @@ export function listLogFiles(dir: string = LOG_DIR): LogFileInfo[] {
         name,
         sizeBytes: statSync(join(dir, name)).size,
         current: true,
-        date: toDateString(new Date()),
+        date: localDay(new Date()),
       });
       continue;
     }
@@ -101,7 +111,7 @@ export function rotateLogs(
   let target: string | null = null;
   if (existsSync(current) && statSync(current).size > 0) {
     // The file being rotated holds the day that just ended, not today.
-    const rotatedDate = toDateString(new Date(now.getTime() - 86_400_000));
+    const rotatedDate = localDay(new Date(now.getTime() - 86_400_000));
     target = join(dir, `app-${rotatedDate}.log`);
     const appended = existsSync(target);
     if (appended) {
@@ -124,7 +134,7 @@ export function rotateLogs(
 /** Deletes rotated log files older than `maxKeepDays` (0 = keep all). Returns the number deleted. */
 export function pruneOldLogs(dir: string, maxKeepDays: number, now = new Date()): number {
   if (maxKeepDays <= 0 || !existsSync(dir)) return 0;
-  const cutoff = toDateString(new Date(now.getTime() - maxKeepDays * 86_400_000));
+  const cutoff = localDay(new Date(now.getTime() - maxKeepDays * 86_400_000));
   let deleted = 0;
   for (const file of readdirSync(dir)) {
     const match = ROTATED_LOG_RE.exec(file);
@@ -137,7 +147,7 @@ export function pruneOldLogs(dir: string, maxKeepDays: number, now = new Date())
   return deleted;
 }
 
-/** Starts the nightly log rotation cron job (LOG_ROTATE_CRON_SCHEDULE, server time). */
+/** Starts the nightly log rotation cron job (LOG_ROTATE_CRON_SCHEDULE, app timezone). */
 export function startLogRotationScheduler(): void {
   if (globalForScheduler.logRotationSchedulerStarted) return;
   if (process.env.DISABLE_LOG_ROTATION === "true") {
@@ -149,13 +159,19 @@ export function startLogRotationScheduler(): void {
     log.error({ schedule }, "Invalid LOG_ROTATE_CRON_SCHEDULE — log rotation scheduler not started");
     return;
   }
-  cron.schedule(schedule, () => {
-    try {
-      rotateLogs();
-    } catch (err) {
-      log.error({ err }, "Log rotation failed");
-    }
-  });
+  cron.schedule(
+    schedule,
+    () => {
+      try {
+        rotateLogs();
+      } catch (err) {
+        log.error({ err }, "Log rotation failed");
+      }
+    },
+    // Runs in the app timezone, so "rotate at 02:35" means local night and the
+    // file it closes off covers exactly the local day named in its filename.
+    { timezone: TZ }
+  );
   globalForScheduler.logRotationSchedulerStarted = true;
   log.info({ schedule, maxKeepDays: config.logs.maxKeepDays }, "Log rotation scheduler started");
 }
