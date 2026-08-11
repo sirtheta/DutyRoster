@@ -3,7 +3,8 @@ import { appOrigin } from "@/lib/origin";
 import { requireSession } from "@/lib/permissions";
 import { rosterForYearWhere } from "@/lib/users";
 import { ENTRY_TYPES } from "@/lib/entry-types";
-import { formatDateCH, parseDate, toDateString } from "@/lib/date";
+import { formatDateCH, parseDate } from "@/lib/date";
+import { todayString } from "@/lib/app-time";
 import { addDays } from "@/lib/date";
 import { isoWeekNumber, partiallyUncoveredDaysInRange, uncoveredWeeksInRange, weekRange } from "@/lib/week";
 import { holidaySetForYear } from "@/lib/holidays";
@@ -20,11 +21,13 @@ export default async function DashboardPage({
   const session = await requireSession();
   const userId = Number(session.user.id);
   const { year: yearParam } = await searchParams;
-  const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
-  const now = new Date();
-  const today = toDateString(now);
+  // Everything here hangs off the calendar day as seen in the app timezone,
+  // not the server's: on a UTC host, "today" would already have moved on at
+  // 22:00 Swiss time, shifting this week's duty display for evening users.
+  const today = todayString();
   const currentYear = today.slice(0, 4);
-  const thisWeek = weekRange(now);
+  const year = yearParam ? parseInt(yearParam, 10) : parseInt(currentYear, 10);
+  const thisWeek = weekRange(parseDate(today)!);
   const nextWeek = weekRange(parseDate(addDays(thisWeek.start, 7))!);
 
   const [activeUsers, yearUsers, entries, currentUser, upcomingDuties, pendingSwaps, dutyEntries, yearDuties, holidays] =

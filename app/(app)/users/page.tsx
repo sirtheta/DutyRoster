@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/permissions";
 import { formatDateCH } from "@/lib/date";
 import { rosterForYearWhere } from "@/lib/users";
+import { currentYear } from "@/lib/app-time";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { UserFormDialog } from "@/components/user-form-dialog";
@@ -24,7 +25,7 @@ export default async function UsersPage({
     // (same cutoff as the calendar/dashboard/export), then drop out of the
     // default view once a new year starts — "all" opts back in, e.g. to
     // reactivate someone rehired later or to look up an old exit date.
-    where: showAll ? undefined : rosterForYearWhere(new Date().getFullYear()),
+    where: showAll ? undefined : rosterForYearWhere(currentYear()),
     orderBy: { rotationOrder: "asc" },
     select: {
       id: true,

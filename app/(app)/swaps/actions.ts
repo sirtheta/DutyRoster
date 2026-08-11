@@ -11,6 +11,7 @@ import { logAudit } from "@/lib/audit";
 import { dispatchPendingNotifications, notifyChannelsFor } from "@/lib/notifications";
 import { notifyCalendarChange } from "@/lib/calendar-events";
 import { formatDateCH, parseDate, toDateString } from "@/lib/date";
+import { todayString } from "@/lib/app-time";
 import { appOrigin } from "@/lib/origin";
 
 const log = logger.child({ module: "swaps" });
@@ -77,7 +78,7 @@ export async function createSwapRequestAction(rawInput: {
     return { error: "Du kannst keinen Tausch mit dir selbst anfragen." };
   }
 
-  const today = toDateString(new Date());
+  const today = todayString();
   if (dates.some((d) => d < today)) {
     return { error: "Vergangene Dienste können nicht getauscht werden." };
   }
