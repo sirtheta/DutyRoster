@@ -7,13 +7,10 @@ import { Button } from "@/components/ui/button";
 import { AuditFilters } from "@/components/audit-filters";
 import { actionLabel, entityLabel, describeAuditLog } from "@/lib/audit-format";
 import type { AuditAction, AuditEntity } from "@/lib/audit";
-import { config } from "@/lib/config";
-import { zonedDayStart, zonedParts } from "@/lib/date";
-
 // Timestamps are stored in UTC; both the display and the year filter have to
 // be pinned to the app timezone explicitly. Falling back to the server's own
 // TZ would show UTC in any container that doesn't set it.
-const TZ = config.timezone;
+import { appDayStart, currentYear as currentYearOf, formatDateTime, yearOf } from "@/lib/app-time";
 
 const PAGE_SIZE = 50;
 
@@ -36,8 +33,8 @@ export default async function AuditPage({
     ...(year
       ? {
           createdAt: {
-            gte: zonedDayStart(`${year}-01-01`, TZ),
-            lt: zonedDayStart(`${Number(year) + 1}-01-01`, TZ),
+            gte: appDayStart(`${year}-01-01`),
+            lt: appDayStart(`${Number(year) + 1}-01-01`),
           },
         }
       : {}),
@@ -58,9 +55,8 @@ export default async function AuditPage({
   const userNames = new Map(users.map((u) => [u.id, u.name]));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const zonedYear = (date: Date) => parseInt(zonedParts(date, TZ).date.slice(0, 4), 10);
-  const currentYear = zonedYear(new Date());
-  const firstYear = oldestLog ? zonedYear(oldestLog.createdAt) : currentYear;
+  const currentYear = currentYearOf();
+  const firstYear = oldestLog ? yearOf(oldestLog.createdAt) : currentYear;
   const years = Array.from({ length: currentYear - firstYear + 1 }, (_, i) => currentYear - i);
 
   function pageHref(p: number) {
@@ -98,11 +94,7 @@ export default async function AuditPage({
           {logs.map((log) => (
             <TableRow key={log.id}>
               <TableCell className="whitespace-nowrap text-muted-foreground">
-                {log.createdAt.toLocaleString("de-CH", {
-                  dateStyle: "short",
-                  timeStyle: "medium",
-                  timeZone: TZ,
-                })}
+                {formatDateTime(log.createdAt)}
               </TableCell>
               <TableCell className="font-medium">{log.userName}</TableCell>
               <TableCell>

@@ -4,7 +4,10 @@ import { dirname, join } from "path";
 import type { PrismaClient } from "@prisma/client";
 import logger from "@/lib/logger";
 import { config } from "@/lib/config";
-import { toDateString } from "@/lib/date";
+// Backup filenames name a calendar day and the job runs nightly, so both
+// follow the app timezone — on a UTC host a 02:30 local run would otherwise
+// be stamped with the previous day.
+import { APP_TIMEZONE, dayOf } from "@/lib/app-time";
 
 const log = logger.child({ module: "backup" });
 
@@ -46,7 +49,7 @@ export async function runBackup(
   const now = options.now ?? new Date();
 
   mkdirSync(backupDir, { recursive: true });
-  const target = join(backupDir, `DutyRoster-backup-${toDateString(now)}.db`);
+  const target = join(backupDir, `DutyRoster-backup-${dayOf(now)}.db`);
   // VACUUM INTO refuses to overwrite an existing file.
   if (existsSync(target)) unlinkSync(target);
   await prisma.$executeRaw`VACUUM INTO ${target}`;
@@ -59,7 +62,7 @@ export async function runBackup(
 /** Deletes backup files older than `maxKeepDays` (0 = keep all). Returns the number deleted. */
 export function pruneOldBackups(backupDir: string, maxKeepDays: number, now = new Date()): number {
   if (maxKeepDays <= 0) return 0;
-  const cutoff = toDateString(new Date(now.getTime() - maxKeepDays * 86_400_000));
+  const cutoff = dayOf(new Date(now.getTime() - maxKeepDays * 86_400_000));
   let deleted = 0;
   for (const file of readdirSync(backupDir)) {
     const match = BACKUP_FILE_RE.exec(file);
@@ -72,7 +75,7 @@ export function pruneOldBackups(backupDir: string, maxKeepDays: number, now = ne
   return deleted;
 }
 
-/** Starts the nightly backup cron job (BACKUP_CRON_SCHEDULE, server time). */
+/** Starts the nightly backup cron job (BACKUP_CRON_SCHEDULE, app timezone). */
 export function startBackupScheduler(): void {
   if (globalForScheduler.backupSchedulerStarted) return;
   if (process.env.DISABLE_BACKUP === "true") {
@@ -84,14 +87,18 @@ export function startBackupScheduler(): void {
     log.error({ schedule }, "Invalid BACKUP_CRON_SCHEDULE — backup scheduler not started");
     return;
   }
-  cron.schedule(schedule, async () => {
-    const { default: prisma } = await import("@/lib/prisma");
-    try {
-      await runBackup(prisma);
-    } catch (err) {
-      log.error({ err }, "Nightly backup failed");
-    }
-  });
+  cron.schedule(
+    schedule,
+    async () => {
+      const { default: prisma } = await import("@/lib/prisma");
+      try {
+        await runBackup(prisma);
+      } catch (err) {
+        log.error({ err }, "Nightly backup failed");
+      }
+    },
+    { timezone: APP_TIMEZONE }
+  );
   globalForScheduler.backupSchedulerStarted = true;
   log.info({ schedule, maxKeepDays: config.backup.maxKeepDays }, "Backup scheduler started");
 }

@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { toDateString } from "@/lib/date";
+import { todayString } from "@/lib/app-time";
 
 // Users who belong on a given year's roster: still active, or terminated
 // partway through/after that year started. Kept apart from a plain
@@ -21,5 +21,5 @@ export function rosterForYearWhere(year: number): Prisma.UserWhereInput {
 // A user deactivated without an exit date (`toggleActiveAction`) is locked out
 // immediately.
 export function canSignIn(user: { isActive: boolean; exitDate: string | null }): boolean {
-  return user.isActive || (user.exitDate !== null && user.exitDate >= toDateString(new Date()));
+  return user.isActive || (user.exitDate !== null && user.exitDate >= todayString());
 }
