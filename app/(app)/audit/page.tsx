@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { AuditFilters } from "@/components/audit-filters";
 import { actionLabel, entityLabel, describeAuditLog } from "@/lib/audit-format";
 import type { AuditAction, AuditEntity } from "@/lib/audit";
+// Timestamps are stored in UTC; both the display and the year filter have to
+// be pinned to the app timezone explicitly. Falling back to the server's own
+// TZ would show UTC in any container that doesn't set it.
+import { appDayStart, currentYear as currentYearOf, formatDateTime, yearOf } from "@/lib/app-time";
 
 const PAGE_SIZE = 50;
 
@@ -27,7 +31,12 @@ export default async function AuditPage({
     ...(action ? { action } : {}),
     ...(userId ? { userId: parseInt(userId, 10) } : {}),
     ...(year
-      ? { createdAt: { gte: new Date(`${year}-01-01T00:00:00`), lt: new Date(`${Number(year) + 1}-01-01T00:00:00`) } }
+      ? {
+          createdAt: {
+            gte: appDayStart(`${year}-01-01`),
+            lt: appDayStart(`${Number(year) + 1}-01-01`),
+          },
+        }
       : {}),
   };
 
@@ -46,8 +55,8 @@ export default async function AuditPage({
   const userNames = new Map(users.map((u) => [u.id, u.name]));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const currentYear = new Date().getFullYear();
-  const firstYear = oldestLog ? oldestLog.createdAt.getFullYear() : currentYear;
+  const currentYear = currentYearOf();
+  const firstYear = oldestLog ? yearOf(oldestLog.createdAt) : currentYear;
   const years = Array.from({ length: currentYear - firstYear + 1 }, (_, i) => currentYear - i);
 
   function pageHref(p: number) {
@@ -85,7 +94,7 @@ export default async function AuditPage({
           {logs.map((log) => (
             <TableRow key={log.id}>
               <TableCell className="whitespace-nowrap text-muted-foreground">
-                {log.createdAt.toLocaleString("de-CH", { dateStyle: "short", timeStyle: "medium" })}
+                {formatDateTime(log.createdAt)}
               </TableCell>
               <TableCell className="font-medium">{log.userName}</TableCell>
               <TableCell>

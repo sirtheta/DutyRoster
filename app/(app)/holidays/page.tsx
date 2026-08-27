@@ -7,11 +7,12 @@ import { HolidayImportForm } from "@/components/holiday-import-form";
 import { HolidayDeleteButton } from "@/components/holiday-delete-button";
 import { groupConsecutiveHolidays } from "@/lib/holidays";
 import { formatDateCH } from "@/lib/date";
+import { currentYear as currentYearOf } from "@/lib/app-time";
 
 export default async function HolidaysPage() {
   const session = await requireSession();
   const isAdmin = session.user.role === "Admin";
-  const currentYear = new Date().getFullYear();
+  const currentYear = currentYearOf();
 
   const holidays = await prisma.holiday.findMany({
     where: { year: { gte: currentYear - 1, lte: currentYear + 1 } },

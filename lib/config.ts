@@ -4,7 +4,16 @@ function envInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/**
+ * IANA timezone the app presents and logs times in. Falls back to the
+ * server's own TZ, then to Europe/Zurich — so a container that sets TZ keeps
+ * working unchanged, and one that doesn't still shows Swiss local time
+ * instead of UTC.
+ */
+const appTimezone = process.env.APP_TIMEZONE || process.env.TZ || "Europe/Zurich";
+
 export const config = {
+  timezone: appTimezone,
   session: {
     maxAgeSec: parseInt(process.env.SESSION_MAX_AGE_SEC ?? "") || 7 * 24 * 60 * 60,
     updateAgeSec: parseInt(process.env.SESSION_UPDATE_AGE_SEC ?? "") || 24 * 60 * 60,
@@ -22,7 +31,9 @@ export const config = {
     cronSchedule: process.env.NOTIFY_CRON_SCHEDULE || "*/5 * * * *",
     // IANA timezone the users' notifyWeekday/notifyHour/notifyMinute refer
     // to. Evaluated via Intl, so it works regardless of the server's own TZ.
-    timezone: process.env.NOTIFY_TIMEZONE || "Europe/Zurich",
+    // Defaults to the app timezone; NOTIFY_TIMEZONE still overrides it, so
+    // notifications can be scheduled in a different zone than the UI shows.
+    timezone: process.env.NOTIFY_TIMEZONE || appTimezone,
     // How often a failing notification is retried before it's given up on.
     maxAttempts: envInt(process.env.NOTIFY_MAX_ATTEMPTS, 3),
     // Days to keep PendingNotification rows (sent or failed); 0 disables pruning.
@@ -37,6 +48,13 @@ export const config = {
     cronSchedule: process.env.BACKUP_CRON_SCHEDULE || "30 2 * * *",
     // Days to keep backup files; 0 disables pruning (keep all).
     maxKeepDays: envInt(process.env.BACKUP_MAX_KEEP_DAYS, 14),
+  },
+  logs: {
+    // Nightly log rotation (<data>/logs/app.log -> app-<date>.log). 5 minutes
+    // after the backup, so the two nightly jobs don't contend for disk I/O.
+    rotateCronSchedule: process.env.LOG_ROTATE_CRON_SCHEDULE || "35 2 * * *",
+    // Days to keep rotated log files; 0 disables pruning (keep all).
+    maxKeepDays: envInt(process.env.LOG_MAX_KEEP_DAYS, 14),
   },
   holidays: {
     defaultCanton: process.env.DEFAULT_CANTON || "BE",

@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.4.15](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.14...DutyRoster-v0.4.15) (2026-08-11)
+
+
+### Bug Fixes
+
+* **app:** decide "today" in the app timezone, not the server's ([#93](https://github.com/sirtheta/DutyRoster/issues/93)) ([ea264ba](https://github.com/sirtheta/DutyRoster/commit/ea264ba487aa9064e611e0008fd1bd738e454a18))
+* **logs:** show audit and log timestamps in the app timezone ([#92](https://github.com/sirtheta/DutyRoster/issues/92)) ([e31093b](https://github.com/sirtheta/DutyRoster/commit/e31093bfaac407f87db13ac73ec79f0efad02a6e))
+
+## [0.4.14](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.13...DutyRoster-v0.4.14) (2026-08-10)
+
+
+### Features
+
+* **audit:** record admin log-file downloads ([d965739](https://github.com/sirtheta/DutyRoster/commit/d9657397923cc8a3587e689d7997a85d99684f19))
+
+
+### Bug Fixes
+
+* **auth:** keep login open until a terminated user's exit date ([#90](https://github.com/sirtheta/DutyRoster/issues/90)) ([59de61c](https://github.com/sirtheta/DutyRoster/commit/59de61cf5b7ea00c374b42ec6652b1478bdd3f41))
+* **calendar:** skip no-op bulk delete of empty cells ([#87](https://github.com/sirtheta/DutyRoster/issues/87)) ([ecc1673](https://github.com/sirtheta/DutyRoster/commit/ecc1673d12cf1925c45c13fc1fdece80e6a48e68))
+* **dashboard:** judge duty coverage over whole weeks, not from today ([3120170](https://github.com/sirtheta/DutyRoster/commit/3120170da3468f1d4aadb7bb7b9e8279cada7745))
+* **logs:** append instead of overwrite on a same-day rotation ([1071d9d](https://github.com/sirtheta/DutyRoster/commit/1071d9d318139be04586c0e2a4ec53f922cf3de1))
+* **logs:** capture pino output instead of silently dropping it ([#88](https://github.com/sirtheta/DutyRoster/issues/88)) ([a6306a5](https://github.com/sirtheta/DutyRoster/commit/a6306a5cfe36fd3a48ba887fa2cec8b6eed68c75))
+* **logs:** do not send a stale Content-Length for the live log file ([76721fd](https://github.com/sirtheta/DutyRoster/commit/76721fda05e5451121e61920fe4b09b6fedad094))
+* **logs:** stop re-exporting startLogCapture from lib/logs ([ee66072](https://github.com/sirtheta/DutyRoster/commit/ee66072625312bd2f36d62da4b22035b889df288))
+* **logs:** stop the log-file error handler recursing into itself ([56a94a6](https://github.com/sirtheta/DutyRoster/commit/56a94a6a0d5b9d8d73759ef506d2deacb824ee3e))
+* **settings:** show jobs turned off by DISABLE_* as deaktiviert ([631dec2](https://github.com/sirtheta/DutyRoster/commit/631dec294b010a74ddde15ea6eb72c64eabcecc0))
+* **ui:** give the user-menu dialogs unique React keys ([#91](https://github.com/sirtheta/DutyRoster/issues/91)) ([387018f](https://github.com/sirtheta/DutyRoster/commit/387018f9ca6c8a847ba68cc7d3f4191c6b6e85fb))
+
+## [0.4.13](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.12...DutyRoster-v0.4.13) (2026-08-10)
+
+
+### Features
+
+* **calendar:** add "Heute" button to jump to today's column ([#82](https://github.com/sirtheta/DutyRoster/issues/82)) ([5146038](https://github.com/sirtheta/DutyRoster/commit/5146038ba70b74ddd8a26bd14da01899e52561e0))
+* **logs:** admin log export from the UI ([#86](https://github.com/sirtheta/DutyRoster/issues/86)) ([a0343d7](https://github.com/sirtheta/DutyRoster/commit/a0343d7ec56dceb843a8788965d14680593da262))
+* **settings:** show automated jobs overview card ([#83](https://github.com/sirtheta/DutyRoster/issues/83)) ([f442227](https://github.com/sirtheta/DutyRoster/commit/f44222729aaf9c57670f0cf958ab9ad90642d2c7))
+
+
+### Bug Fixes
+
+* **auth:** make email lookups case-insensitive ([#85](https://github.com/sirtheta/DutyRoster/issues/85)) ([70ff17a](https://github.com/sirtheta/DutyRoster/commit/70ff17aab9978cc4cdaea1e8038522184e52c172))
+
 ## [0.4.12](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.11...DutyRoster-v0.4.12) (2026-08-10)
 
 

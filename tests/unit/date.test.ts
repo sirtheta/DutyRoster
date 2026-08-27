@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseDate, toDateString, addDays, datesOfYear, weekday, isWeekend, weekdayAbbr, formatDateCH, zonedParts, isValidTimeZone } from "@/lib/date";
+import { parseDate, toDateString, addDays, datesOfYear, weekday, isWeekend, weekdayAbbr, formatDateCH, zonedParts, isValidTimeZone, zonedTimestamp, zonedDayStart } from "@/lib/date";
 
 describe("date helpers", () => {
   it("parses YYYY-MM-DD as local midnight", () => {
@@ -97,5 +97,47 @@ describe("date helpers", () => {
     expect(isValidTimeZone("UTC")).toBe(true);
     expect(isValidTimeZone("Not/AZone")).toBe(false);
     expect(isValidTimeZone("")).toBe(false);
+  });
+
+  it("zonedTimestamp renders ISO-8601 local time with the zone's offset", () => {
+    // Winter: Zurich is CET (+01:00), summer CEST (+02:00).
+    expect(zonedTimestamp(new Date("2026-01-15T22:07:03.042Z"), "Europe/Zurich")).toBe(
+      "2026-01-15T23:07:03.042+01:00"
+    );
+    expect(zonedTimestamp(new Date("2026-07-15T22:07:03.042Z"), "Europe/Zurich")).toBe(
+      "2026-07-16T00:07:03.042+02:00"
+    );
+  });
+
+  it("zonedTimestamp writes UTC as +00:00 rather than a bare 'GMT'", () => {
+    expect(zonedTimestamp(new Date("2026-07-15T22:07:03.042Z"), "UTC")).toBe(
+      "2026-07-15T22:07:03.042+00:00"
+    );
+  });
+
+  it("zonedTimestamp stays parseable back into the same instant", () => {
+    const instant = new Date("2026-07-15T22:07:03.042Z");
+    expect(new Date(zonedTimestamp(instant, "Europe/Zurich")).getTime()).toBe(instant.getTime());
+  });
+
+  it("zonedDayStart returns the UTC instant of local midnight", () => {
+    expect(zonedDayStart("2026-01-01", "Europe/Zurich").toISOString()).toBe("2025-12-31T23:00:00.000Z");
+    expect(zonedDayStart("2026-07-01", "Europe/Zurich").toISOString()).toBe("2026-06-30T22:00:00.000Z");
+    expect(zonedDayStart("2026-01-01", "UTC").toISOString()).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("zonedDayStart handles the day the clocks change", () => {
+    // DST starts 2026-03-29 in Zurich: the day still begins at 00:00 CET,
+    // even though the offset changes to +02:00 a couple of hours later.
+    expect(zonedDayStart("2026-03-29", "Europe/Zurich").toISOString()).toBe("2026-03-28T23:00:00.000Z");
+    // DST ends 2026-10-25: the day begins at 00:00 CEST.
+    expect(zonedDayStart("2026-10-25", "Europe/Zurich").toISOString()).toBe("2026-10-24T22:00:00.000Z");
+  });
+
+  it("zonedDayStart agrees with zonedParts on which local day it lands on", () => {
+    const start = zonedDayStart("2026-08-11", "Europe/Zurich");
+    expect(zonedParts(start, "Europe/Zurich")).toMatchObject({ date: "2026-08-11", hour: 0, minute: 0 });
+    // One millisecond earlier is still the previous day.
+    expect(zonedParts(new Date(start.getTime() - 1), "Europe/Zurich").date).toBe("2026-08-10");
   });
 });

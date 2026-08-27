@@ -201,8 +201,15 @@ export function CalendarGrid({
   }
 
   function bulkApply(type: EntryType | null) {
-    const cells = [...selection].map(parseCellKey);
-    if (cells.length === 0) return;
+    // Deleting skips cells that hold nothing — same no-op guard as paintCell,
+    // so an Entf on an empty selection doesn't cost a roundtrip or a toast.
+    const cells = [...selection]
+      .map(parseCellKey)
+      .filter((c) => type !== null || entryMap.has(`${c.userId}-${c.date}`));
+    if (cells.length === 0) {
+      clearSelection();
+      return;
+    }
     startTransition(async () => {
       const res = await bulkSetEntriesAction(cells, type);
       if (res.error) toast.error(res.error);

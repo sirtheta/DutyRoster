@@ -3,7 +3,8 @@ import { appOrigin } from "@/lib/origin";
 import { requireSession } from "@/lib/permissions";
 import { rosterForYearWhere } from "@/lib/users";
 import { ENTRY_TYPES } from "@/lib/entry-types";
-import { formatDateCH, parseDate, toDateString } from "@/lib/date";
+import { formatDateCH, parseDate } from "@/lib/date";
+import { todayString } from "@/lib/app-time";
 import { addDays } from "@/lib/date";
 import { isoWeekNumber, partiallyUncoveredDaysInRange, uncoveredWeeksInRange, weekRange } from "@/lib/week";
 import { holidaySetForYear } from "@/lib/holidays";
@@ -20,11 +21,13 @@ export default async function DashboardPage({
   const session = await requireSession();
   const userId = Number(session.user.id);
   const { year: yearParam } = await searchParams;
-  const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
-  const now = new Date();
-  const today = toDateString(now);
+  // Everything here hangs off the calendar day as seen in the app timezone,
+  // not the server's: on a UTC host, "today" would already have moved on at
+  // 22:00 Swiss time, shifting this week's duty display for evening users.
+  const today = todayString();
   const currentYear = today.slice(0, 4);
-  const thisWeek = weekRange(now);
+  const year = yearParam ? parseInt(yearParam, 10) : parseInt(currentYear, 10);
+  const thisWeek = weekRange(parseDate(today)!);
   const nextWeek = weekRange(parseDate(addDays(thisWeek.start, 7))!);
 
   const [activeUsers, yearUsers, entries, currentUser, upcomingDuties, pendingSwaps, dutyEntries, yearDuties, holidays] =
@@ -66,10 +69,23 @@ export default async function DashboardPage({
   const dutyThisWeek = { weekNumber: isoWeekNumber(thisWeek.start), names: namesInRange(thisWeek.start, thisWeek.end) };
   const dutyNextWeek = { weekNumber: isoWeekNumber(nextWeek.start), names: namesInRange(nextWeek.start, nextWeek.end) };
   const yearDutyDates = new Set(yearDuties.map((e) => e.date));
-  const uncovered = uncoveredWeeksInRange(today, `${currentYear}-12-31`, yearDutyDates, holidays).map(
-    (w) => w.weekNumber
-  );
-  const uncoveredDays = partiallyUncoveredDaysInRange(today, `${currentYear}-12-31`, yearDutyDates, holidays);
+  // Coverage is judged over whole weeks, then filtered down to what's still
+  // ahead — starting the range at `today` would clip the current week to
+  // today..Fr, hiding a Mon/Tue duty and reporting an already-covered week as
+  // uncovered. Clamped to 1 January because yearDuties/holidays only hold the
+  // current year, so days before it can't be judged either way.
+  const coverageFrom =
+    thisWeek.start < `${currentYear}-01-01` ? `${currentYear}-01-01` : thisWeek.start;
+  const coverageTo = `${currentYear}-12-31`;
+  const uncovered = uncoveredWeeksInRange(coverageFrom, coverageTo, yearDutyDates, holidays)
+    .filter((w) => w.dates.some((d) => d >= today))
+    .map((w) => w.weekNumber);
+  const uncoveredDays = partiallyUncoveredDaysInRange(
+    coverageFrom,
+    coverageTo,
+    yearDutyDates,
+    holidays
+  ).filter((d) => d >= today);
 
   // Own upcoming S-duties grouped into calendar weeks — the units offered for
   // swapping. Weeks already part of an open request are hidden.
