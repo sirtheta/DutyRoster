@@ -62,6 +62,34 @@ describe("notifications", () => {
     expect(queuedAgain).toBe(0);
   });
 
+  it("notifies on the actual day when the week has one S-Dienst", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({
+      data: createTestUser({ notifyEnabled: true, notifyWeekday: 1, notifyHour: 7 }),
+    });
+    await prisma.entry.create({ data: { userId: user.id, date: "2026-03-03", type: "S" } });
+
+    const queued = await queueDueNotifications(prisma, new Date("2026-03-03T07:00:00+01:00"));
+
+    expect(queued).toBe(1);
+    const notification = await prisma.pendingNotification.findFirstOrThrow({ where: { userId: user.id } });
+    expect(notification.subject).toContain("03.03.2026");
+  });
+
+  it("keeps one weekly notification when the week has multiple S-Dienste", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({
+      data: createTestUser({ notifyEnabled: true, notifyWeekday: 1, notifyHour: 7 }),
+    });
+    for (const date of ["2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05"]) {
+      await prisma.entry.create({ data: { userId: user.id, date, type: "S" } });
+    }
+
+    expect(await queueDueNotifications(prisma, new Date("2026-03-02T07:00:00+01:00"))).toBe(1);
+    expect(await queueDueNotifications(prisma, new Date("2026-03-03T07:00:00+01:00"))).toBe(0);
+    expect(await prisma.pendingNotification.count({ where: { userId: user.id } })).toBe(1);
+  });
+
   it("matches notifyWeekday/notifyHour in the app timezone, not the server's", async () => {
     const { prisma } = db;
     const user = await prisma.user.create({

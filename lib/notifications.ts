@@ -68,10 +68,10 @@ export function startNotificationScheduler(): void {
 }
 
 /**
- * Finds users whose configured weekday/hour/minute matches the current
- * moment and who have an S-Dienst in the current week, then queues one
- * notification per user (skips users already queued for this week, so
- * retries of the same slot don't produce duplicates).
+ * Finds users with an S-Dienst in the current week. For a single duty, the
+ * notification is sent on the actual duty day; weeks with multiple duties
+ * keep the configured weekly reminder. Repeated scheduler runs do not
+ * produce duplicates.
  */
 export async function queueDueNotifications(
   prisma: PrismaClient,
@@ -89,7 +89,6 @@ export async function queueDueNotifications(
     where: {
       isActive: true,
       notifyEnabled: true,
-      ...(force ? {} : { notifyWeekday: weekday, notifyHour: hour, notifyMinute: minute }),
     },
   });
 
@@ -101,17 +100,30 @@ export async function queueDueNotifications(
     });
     if (sDuties.length === 0) continue;
 
-    if (!force) {
-      const alreadyQueued = await prisma.pendingNotification.findFirst({
-        where: { userId: user.id, createdAt: { gte: new Date(`${start}T00:00:00`) } },
-      });
-      if (alreadyQueued) continue;
-    }
+    const isSingleDutyDay = sDuties.length === 1 && sDuties[0].date === today;
+    const isConfiguredWeeklySlot =
+      user.notifyWeekday === weekday && user.notifyHour === hour && user.notifyMinute === minute;
+    if (!force && !isSingleDutyDay && !isConfiguredWeeklySlot) continue;
 
     const firstDate = formatDateCH(sDuties[0].date);
     const lastDate = formatDateCH(sDuties[sDuties.length - 1].date);
     const dateRange = firstDate === lastDate ? `am ${firstDate}` : `von ${firstDate} bis ${lastDate}`;
-    const subject = `Sanitätsplaner: Dein S-Dienst diese Woche`;
+    const subject =
+      sDuties.length === 1
+        ? `Sanitätsplaner: Dein S-Dienst am ${firstDate}`
+        : `Sanitätsplaner: Dein S-Dienst diese Woche`;
+
+    if (!force) {
+      const alreadyQueued = await prisma.pendingNotification.findFirst({
+        where: {
+          userId: user.id,
+          subject,
+          createdAt: { gte: new Date(`${start}T00:00:00`) },
+        },
+      });
+      if (alreadyQueued) continue;
+    }
+
     const body = `Hallo ${user.name}\n\nDu hast diese Woche ${TYPE_INFO.S.label} ${dateRange}.`;
 
     const channels = notifyChannelsFor(user);

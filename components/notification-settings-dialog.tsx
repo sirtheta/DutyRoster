@@ -174,6 +174,10 @@ export function NotificationSettingsDialog({
               <span className="text-xs text-muted-foreground">
                 z. B. 07:00 Uhr
               </span>
+              <span className="text-xs text-muted-foreground">
+                Bei genau einem Dienst erfolgt die Nachricht am Diensttag. Bei mehreren Diensten
+                erhältst du eine Wochenübersicht am ausgewählten Wochentag.
+              </span>
             </div>
             {notifyTelegram && (
               <div className="flex flex-col gap-2">
