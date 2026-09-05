@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.16](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.15...DutyRoster-v0.4.16) (2026-09-02)
+
+
+### Bug Fixes
+
+* **notifications:** alert for single duty days ([176b9a6](https://github.com/sirtheta/DutyRoster/commit/176b9a6775fd913bea793ef2dabbd36b810d0b51)), closes [#113](https://github.com/sirtheta/DutyRoster/issues/113)
+
 ## [0.4.15](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.14...DutyRoster-v0.4.15) (2026-08-11)
 
 
