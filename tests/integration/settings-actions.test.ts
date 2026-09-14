@@ -34,7 +34,7 @@ describe("settings actions", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    (process.env as { NODE_ENV: string | undefined }).NODE_ENV = originalNodeEnv;
     global.fetch = originalFetch;
   });
 
@@ -165,7 +165,7 @@ describe("settings actions", () => {
   });
 
   it("triggerNotificationCheck queues and dispatches outside production", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as { NODE_ENV: string | undefined }).NODE_ENV = "development";
     const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin", notifyEnabled: true }) });
     currentSession = sessionFor(admin.id, "Admin");
 
@@ -181,7 +181,7 @@ describe("settings actions", () => {
   });
 
   it("triggerNotificationCheck refuses to run in production", async () => {
-    process.env.NODE_ENV = "production";
+    (process.env as { NODE_ENV: string | undefined }).NODE_ENV = "production";
     const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
     currentSession = sessionFor(admin.id, "Admin");
 
@@ -192,7 +192,7 @@ describe("settings actions", () => {
   });
 
   it("triggerNotificationCheck reports an error instead of throwing when the pipeline fails", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as { NODE_ENV: string | undefined }).NODE_ENV = "development";
     const admin = await db.prisma.user.create({ data: createTestUser({ role: "Admin" }) });
     currentSession = sessionFor(admin.id, "Admin");
     const spy = vi.spyOn(db.prisma.user, "findMany").mockRejectedValueOnce(new Error("db unavailable"));

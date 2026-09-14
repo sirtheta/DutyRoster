@@ -9,17 +9,17 @@ describe("validateEnv", () => {
   };
 
   beforeEach(() => {
-    process.env.NODE_ENV = "production";
+    (process.env as { NODE_ENV: string | undefined }).NODE_ENV = "production";
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = original.NODE_ENV;
+    (process.env as { NODE_ENV: string | undefined }).NODE_ENV = original.NODE_ENV;
     process.env.AUTH_SECRET = original.AUTH_SECRET;
     process.env.ENCRYPTION_KEY = original.ENCRYPTION_KEY;
   });
 
   it("does nothing outside production", () => {
-    process.env.NODE_ENV = "development";
+    (process.env as { NODE_ENV: string | undefined }).NODE_ENV = "development";
     delete process.env.AUTH_SECRET;
     delete process.env.ENCRYPTION_KEY;
     expect(() => validateEnv()).not.toThrow();
