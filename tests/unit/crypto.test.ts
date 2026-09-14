@@ -11,7 +11,7 @@ describe("crypto", () => {
 
   afterEach(() => {
     process.env.ENCRYPTION_KEY = originalKey;
-    process.env.NODE_ENV = originalEnv;
+    (process.env as { NODE_ENV: string | undefined }).NODE_ENV = originalEnv;
   });
 
   it("round-trips a secret through encryptSecret/decryptSecret", async () => {
@@ -58,7 +58,7 @@ describe("crypto", () => {
 
   it("throws in production when ENCRYPTION_KEY is unset", async () => {
     delete process.env.ENCRYPTION_KEY;
-    process.env.NODE_ENV = "production";
+    (process.env as { NODE_ENV: string | undefined }).NODE_ENV = "production";
     const { encryptSecret } = await import("@/lib/crypto");
     expect(() => encryptSecret("hunter2")).toThrow("ENCRYPTION_KEY must be set in production");
   });

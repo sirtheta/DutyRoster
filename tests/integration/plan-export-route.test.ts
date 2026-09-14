@@ -67,7 +67,7 @@ describe("GET /api/plan/[year]/export", () => {
     const buffer = Buffer.from(await res.arrayBuffer());
 
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
     const sheet = workbook.getWorksheet("2026");
     expect(sheet).toBeDefined();
 
@@ -103,7 +103,7 @@ describe("GET /api/plan/[year]/export", () => {
       });
       const buffer = Buffer.from(await res.arrayBuffer());
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(buffer);
+      await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
       const sheet = workbook.getWorksheet(year)!;
       const names = new Set<string>();
       sheet.eachRow((row) => {

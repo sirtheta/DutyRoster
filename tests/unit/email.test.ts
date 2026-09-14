@@ -4,7 +4,7 @@ import type { SystemSettings } from "@prisma/client";
 const mockSendMail = vi.fn().mockResolvedValue({});
 const mockCreateTransport = vi.fn(() => ({ sendMail: mockSendMail }));
 vi.mock("nodemailer", () => ({
-  default: { createTransport: (...args: unknown[]) => mockCreateTransport(...args) },
+  default: { createTransport: (...args: unknown[]) => mockCreateTransport(...(args as [])) },
 }));
 
 function settings(overrides: Partial<SystemSettings> = {}): SystemSettings {
