@@ -4,7 +4,7 @@ import logger from "@/lib/logger";
 import { config } from "@/lib/config";
 import { sendPlanEmail } from "@/lib/email";
 import { sendTelegramMessage } from "@/lib/telegram";
-import { weekRange } from "@/lib/week";
+import { partiallyUncoveredDaysInRange, uncoveredWeeksInRange, weekRange } from "@/lib/week";
 import { formatDateCH, isValidTimeZone, parseDate, zonedParts } from "@/lib/date";
 import { TYPE_INFO } from "@/lib/entry-types";
 
@@ -53,6 +53,7 @@ export function startNotificationScheduler(): void {
       const { default: prisma } = await import("@/lib/prisma");
       try {
         await queueDueNotifications(prisma);
+        await queueCoverageAlerts(prisma);
         await dispatchPendingNotifications(prisma);
         await pruneExpiredNotifications(prisma);
         const { pruneExpiredAuditLogs } = await import("@/lib/audit");
@@ -131,6 +132,70 @@ export async function queueDueNotifications(
     for (const channel of channels) {
       await prisma.pendingNotification.create({
         data: { userId: user.id, channel, subject, body },
+      });
+    }
+    queued++;
+  }
+  return queued;
+}
+
+const COVERAGE_ALERT_SUBJECT = "Sanitätsplaner: Ungedeckte Diensttage";
+
+/**
+ * Alerts active Admins once/day about uncovered S-Dienst weeks/days for the
+ * rest of the year. Always Email, plus Telegram if chat id set — ignores
+ * notifyEnabled (operational alert, not a personal reminder). Re-queues on
+ * later days while unresolved.
+ */
+export async function queueCoverageAlerts(prisma: PrismaClient, now = new Date()): Promise<number> {
+  const { date: today } = zonedParts(now, config.notifications.timezone);
+  const year = parseInt(today.slice(0, 4), 10);
+  const coverageFrom = weekRange(parseDate(today)!).start;
+  const coverageTo = `${year}-12-31`;
+
+  const [sDuties, holidays] = await Promise.all([
+    prisma.entry.findMany({ where: { type: "S", date: { startsWith: `${year}-` } }, select: { date: true } }),
+    prisma.holiday.findMany({ where: { year }, select: { date: true } }),
+  ]);
+  const sDutyDates = new Set(sDuties.map((e) => e.date));
+  const holidayDates = new Set(holidays.map((h) => h.date));
+
+  const uncoveredWeeks = uncoveredWeeksInRange(coverageFrom, coverageTo, sDutyDates, holidayDates).filter((w) =>
+    w.dates.some((d) => d >= today)
+  );
+  const uncoveredDays = partiallyUncoveredDaysInRange(coverageFrom, coverageTo, sDutyDates, holidayDates).filter(
+    (d) => d >= today
+  );
+  if (uncoveredWeeks.length === 0 && uncoveredDays.length === 0) return 0;
+
+  const sections: string[] = [];
+  if (uncoveredWeeks.length > 0) {
+    sections.push(
+      `Ungedeckte Wochen: ${uncoveredWeeks.map((w) => `KW ${w.weekNumber}`).join(", ")} — für diese Wochen ist niemand für den Sanitäts-Dienst eingeteilt.`
+    );
+  }
+  if (uncoveredDays.length > 0) {
+    sections.push(
+      `Ungedeckte Tage: ${uncoveredDays.map(formatDateCH).join(", ")} — an diesen Tagen ist trotz Dienst in der übrigen Woche niemand eingeteilt.`
+    );
+  }
+
+  const admins = await prisma.user.findMany({ where: { isActive: true, role: "Admin" } });
+  const todayStart = new Date(`${today}T00:00:00`);
+
+  let queued = 0;
+  for (const admin of admins) {
+    const alreadyQueued = await prisma.pendingNotification.findFirst({
+      where: { userId: admin.id, subject: COVERAGE_ALERT_SUBJECT, createdAt: { gte: todayStart } },
+    });
+    if (alreadyQueued) continue;
+
+    const body = `Hallo ${admin.name}\n\n${sections.join("\n\n")}`;
+    const channels: NotifyChannel[] = ["Email"];
+    if (admin.telegramChatId) channels.push("Telegram");
+    for (const channel of channels) {
+      await prisma.pendingNotification.create({
+        data: { userId: admin.id, channel, subject: COVERAGE_ALERT_SUBJECT, body },
       });
     }
     queued++;

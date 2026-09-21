@@ -3,6 +3,7 @@ import cron from "node-cron";
 import { createTestDatabase, createTestUser } from "../test-utils";
 import {
   queueDueNotifications,
+  queueCoverageAlerts,
   dispatchPendingNotifications,
   pruneExpiredNotifications,
 } from "@/lib/notifications";
@@ -298,6 +299,112 @@ describe("notifications", () => {
     expect(pruned).toBe(1);
     const remaining = await prisma.auditLog.findMany();
     expect(remaining.map((a) => a.id)).toEqual([recent.id]);
+  });
+
+  describe("queueCoverageAlerts", () => {
+    // Dec 31 2026 is a Thursday, so the year's last work week is Mon 28 - Thu 31.
+    const tuesday = new Date("2026-12-29T07:00:00+01:00");
+
+    it("does nothing when the rest of the year is fully covered", async () => {
+      const { prisma } = db;
+      await prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+      const someone = await prisma.user.create({
+        data: createTestUser({ email: "duty@example.com" }),
+      });
+      for (const date of ["2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31"]) {
+        await prisma.entry.create({ data: { userId: someone.id, date, type: "S" } });
+      }
+
+      const queued = await queueCoverageAlerts(prisma, tuesday);
+
+      expect(queued).toBe(0);
+      expect(await prisma.pendingNotification.count()).toBe(0);
+    });
+
+    it("emails active admins about an uncovered week", async () => {
+      const { prisma } = db;
+      const admin = await prisma.user.create({
+        data: createTestUser({ role: "Admin", email: "admin@example.com" }),
+      });
+
+      const queued = await queueCoverageAlerts(prisma, tuesday);
+
+      expect(queued).toBe(1);
+      const notifications = await prisma.pendingNotification.findMany({ where: { userId: admin.id } });
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].channel).toBe("Email");
+      expect(notifications[0].body).toContain("KW 53");
+    });
+
+    it("also queues Telegram when the admin has a chat id configured", async () => {
+      const { prisma } = db;
+      const admin = await prisma.user.create({
+        data: createTestUser({ role: "Admin", telegramChatId: "12345" }),
+      });
+
+      await queueCoverageAlerts(prisma, tuesday);
+
+      const channels = (
+        await prisma.pendingNotification.findMany({ where: { userId: admin.id } })
+      ).map((n) => n.channel);
+      expect(channels.sort()).toEqual(["Email", "Telegram"]);
+    });
+
+    it("reports individual gap days within an otherwise-covered week", async () => {
+      const { prisma } = db;
+      const admin = await prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+      const someone = await prisma.user.create({
+        data: createTestUser({ email: "duty@example.com" }),
+      });
+      // Everyone covered except Wednesday 2026-12-30.
+      for (const date of ["2026-12-28", "2026-12-29", "2026-12-31"]) {
+        await prisma.entry.create({ data: { userId: someone.id, date, type: "S" } });
+      }
+
+      await queueCoverageAlerts(prisma, tuesday);
+
+      const notification = await prisma.pendingNotification.findFirstOrThrow({
+        where: { userId: admin.id },
+      });
+      expect(notification.body).toContain("30.12.2026");
+      expect(notification.body).not.toContain("KW 53");
+    });
+
+    it("does not alert non-admin users or inactive admins", async () => {
+      const { prisma } = db;
+      await prisma.user.create({ data: createTestUser({ role: "Editor", email: "editor@example.com" }) });
+      await prisma.user.create({
+        data: createTestUser({ role: "Admin", email: "inactive-admin@example.com", isActive: false }),
+      });
+
+      const queued = await queueCoverageAlerts(prisma, tuesday);
+
+      expect(queued).toBe(0);
+      expect(await prisma.pendingNotification.count()).toBe(0);
+    });
+
+    it("does not re-queue the same alert on the same day", async () => {
+      const { prisma } = db;
+      await prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+
+      expect(await queueCoverageAlerts(prisma, tuesday)).toBe(1);
+      // Pin createdAt to the simulated instant — the real insert timestamp
+      // (actual wall clock) would otherwise decide the dedupe check instead.
+      await prisma.pendingNotification.updateMany({ data: { createdAt: tuesday } });
+      expect(await queueCoverageAlerts(prisma, tuesday)).toBe(0);
+      expect(await prisma.pendingNotification.count()).toBe(1);
+    });
+
+    it("queues again the next day while the gap is still unresolved", async () => {
+      const { prisma } = db;
+      await prisma.user.create({ data: createTestUser({ role: "Admin" }) });
+      const wednesday = new Date("2026-12-30T07:00:00+01:00");
+
+      expect(await queueCoverageAlerts(prisma, tuesday)).toBe(1);
+      await prisma.pendingNotification.updateMany({ data: { createdAt: tuesday } });
+      expect(await queueCoverageAlerts(prisma, wednesday)).toBe(1);
+      expect(await prisma.pendingNotification.count()).toBe(2);
+    });
   });
 
   it("does not register a cron job when the schedule is invalid", async () => {
