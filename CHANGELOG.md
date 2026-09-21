@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.17](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.16...DutyRoster-v0.4.17) (2026-09-21)
+
+
+### Features
+
+* **notifications:** alert admins about uncovered duty coverage ([#133](https://github.com/sirtheta/DutyRoster/issues/133)) ([a89b871](https://github.com/sirtheta/DutyRoster/commit/a89b871278d18e56cd491776461955c6d5a3f5a3))
+
 ## [0.4.16](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.15...DutyRoster-v0.4.16) (2026-09-02)
 
 
