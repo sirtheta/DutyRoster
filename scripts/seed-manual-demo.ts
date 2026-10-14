@@ -142,7 +142,7 @@ async function main() {
       if (!weeks.has(start)) weeks.set(start, []);
       weeks.get(start)!.push(d);
     }
-    return [...weeks.entries()].filter(([start]) => start > "2026-07-19").sort(([a], [b]) => a.localeCompare(b));
+    return [...weeks.entries()].filter(([start]) => start > new Date().toISOString().slice(0, 10)).sort(([a], [b]) => a.localeCompare(b));
   }
 
   const marco = created["Marco Keller"];

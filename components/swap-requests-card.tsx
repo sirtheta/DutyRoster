@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatDateCH } from "@/lib/date";
 import {
   createSwapRequestAction,
   acceptSwapRequestAction,
@@ -26,8 +27,8 @@ export interface SwapWeekOption {
   key: string;
   label: string;
   dates: string[];
-  /** IDs of colleagues with no entry on any day of this week. */
-  availableColleagueIds: number[];
+  /** Per day: IDs of colleagues with no entry on that day. */
+  availableByDate: Record<string, number[]>;
 }
 
 export interface SwapRequestRow {
@@ -53,17 +54,27 @@ export function SwapRequestsCard({
   const [weekKey, setWeekKey] = useState("");
   const [colleagueId, setColleagueId] = useState("");
   const [comment, setComment] = useState("");
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
 
   const BROADCAST = "__all__";
 
   const selectedWeek = myWeeks.find((w) => w.key === weekKey);
   const availableColleagues = selectedWeek
-    ? colleagues.filter((c) => selectedWeek.availableColleagueIds.includes(c.id))
+    ? colleagues.filter((c) =>
+        selectedDates.every((d) => selectedWeek.availableByDate[d]?.includes(c.id))
+      )
     : colleagues;
-  const noneAvailable = !!selectedWeek && availableColleagues.length === 0;
+  const noneAvailable =
+    !!selectedWeek && selectedDates.length > 0 && availableColleagues.length === 0;
 
   function handleWeekChange(key: string) {
     setWeekKey(key);
+    setColleagueId("");
+    setSelectedDates(myWeeks.find((w) => w.key === key)?.dates ?? []);
+  }
+
+  function toggleDate(date: string, checked: boolean) {
+    setSelectedDates((prev) => (checked ? [...prev, date] : prev.filter((d) => d !== date)));
     setColleagueId("");
   }
 
@@ -81,20 +92,22 @@ export function SwapRequestsCard({
 
   function submitRequest() {
     const week = myWeeks.find((w) => w.key === weekKey);
-    if (!week || !colleagueId) {
-      toast.error("Bitte Woche und Person auswählen.");
+    const dates = week?.dates.filter((d) => selectedDates.includes(d)) ?? [];
+    if (!week || dates.length === 0 || !colleagueId) {
+      toast.error("Bitte Woche, Tage und Person auswählen.");
       return;
     }
     run(
       () =>
         createSwapRequestAction({
           toUserId: colleagueId === BROADCAST ? null : Number(colleagueId),
-          dates: week.dates,
+          dates,
           comment: comment || undefined,
         }),
       colleagueId === BROADCAST ? "Anfrage an alle gesendet." : "Tauschanfrage gesendet."
     );
     setWeekKey("");
+    setSelectedDates([]);
     setColleagueId("");
     setComment("");
   }
@@ -187,9 +200,26 @@ export function SwapRequestsCard({
                   </SelectContent>
                 </Select>
               </div>
+              {selectedWeek && (
+                <div className="flex flex-col gap-2">
+                  <Label>Tage</Label>
+                  <div className="flex flex-wrap gap-3">
+                    {selectedWeek.dates.map((d) => (
+                      <label key={d} className="flex items-center gap-1.5 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={selectedDates.includes(d)}
+                          onChange={(e) => toggleDate(d, e.target.checked)}
+                        />
+                        {formatDateCH(d)}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               {noneAvailable ? (
                 <p className="text-xs text-destructive">
-                  Keine Kolleg:innen für diese Woche verfügbar.
+                  Keine Kolleg:innen für die gewählten Tage verfügbar.
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -224,7 +254,7 @@ export function SwapRequestsCard({
               )}
               <Button
                 size="sm"
-                disabled={isPending || !weekKey || !colleagueId}
+                disabled={isPending || !weekKey || selectedDates.length === 0 || !colleagueId}
                 onClick={submitRequest}
               >
                 {isPending ? "Wird gesendet…" : "Anfragen"}

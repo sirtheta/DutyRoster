@@ -121,14 +121,24 @@ export default async function DashboardPage({
   }
 
   const myWeeks = [...weekGroups.entries()]
-    .filter(([, dates]) => dates.every((d) => !requestedDates.has(d)))
-    .map(([start, dates]) => ({
+    .map(([start, allDates]) => ({
+      start,
+      allDates,
+      // Days already part of an open request can't be offered again; the rest
+      // of the week stays offerable (single days or any subset).
+      dates: allDates.filter((d) => !requestedDates.has(d)),
+    }))
+    .filter(({ dates }) => dates.length > 0)
+    .map(({ start, allDates, dates }) => ({
       key: start,
-      label: `KW ${isoWeekNumber(dates[0])} (${formatDateCH(dates[0])} – ${formatDateCH(dates[dates.length - 1])})`,
+      label: `KW ${isoWeekNumber(allDates[0])} (${formatDateCH(allDates[0])} – ${formatDateCH(allDates[allDates.length - 1])})`,
       dates,
-      availableColleagueIds: colleagues
-        .map((c) => c.id)
-        .filter((id) => dates.every((d) => !blockedByDate.get(d)?.has(id))),
+      availableByDate: Object.fromEntries(
+        dates.map((d) => [
+          d,
+          colleagues.map((c) => c.id).filter((id) => !blockedByDate.get(d)?.has(id)),
+        ])
+      ),
     }));
 
   const toSwapRow = (r: (typeof pendingSwaps)[number], otherName: string) => ({

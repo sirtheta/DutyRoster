@@ -82,6 +82,11 @@ const shots: Shot[] = [
       await login(page, EDITOR);
       await page.goto(`${BASE_URL}/dashboard`);
       await page.waitForSelector("text=Anfragen"); // the submit button in the "Tausch anfragen" form
+      // Pick a week and keep only its first day ticked to show the single-day selection.
+      await page.click('button[role="combobox"]:has-text("Woche wählen")');
+      await page.locator('[role="option"]').first().click();
+      const boxes = page.locator('input[type="checkbox"]');
+      for (let i = 1; i < (await boxes.count()); i++) await boxes.nth(i).uncheck();
       await page.locator('button:has-text("Anfragen")').last().scrollIntoViewIfNeeded();
       await page.waitForTimeout(150);
       await page.screenshot({ path: path.join(OUT_DIR, "diensttausch.png") });
@@ -134,9 +139,29 @@ const shots: Shot[] = [
       await login(page, ADMIN);
       await page.goto(`${BASE_URL}/settings`);
       await page.waitForSelector("text=SMTP (E-Mail-Versand)");
-      await page.locator('button:has-text("Speichern")').scrollIntoViewIfNeeded();
+      await page.waitForSelector("text=Automatische Abläufe");
       await page.waitForTimeout(150);
-      await page.screenshot({ path: path.join(OUT_DIR, "settings.png") });
+      await page.screenshot({ path: path.join(OUT_DIR, "settings.png"), fullPage: true });
+    },
+  },
+  {
+    name: "logs",
+    run: async (page) => {
+      await login(page, ADMIN);
+      await page.goto(`${BASE_URL}/logs`);
+      await page.waitForSelector("text=Herunterladen");
+      await page.waitForTimeout(150);
+      await page.screenshot({ path: path.join(OUT_DIR, "logs.png") });
+    },
+  },
+  {
+    name: "calendar",
+    run: async (page) => {
+      await login(page, ADMIN);
+      await page.goto(`${BASE_URL}/calendar/2026`);
+      await page.waitForSelector("text=Heute");
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: path.join(OUT_DIR, "calendar.png") });
     },
   },
 ];
