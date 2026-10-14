@@ -139,9 +139,29 @@ const shots: Shot[] = [
       await login(page, ADMIN);
       await page.goto(`${BASE_URL}/settings`);
       await page.waitForSelector("text=SMTP (E-Mail-Versand)");
-      await page.locator('button:has-text("Speichern")').scrollIntoViewIfNeeded();
+      await page.waitForSelector("text=Automatische Abläufe");
       await page.waitForTimeout(150);
-      await page.screenshot({ path: path.join(OUT_DIR, "settings.png") });
+      await page.screenshot({ path: path.join(OUT_DIR, "settings.png"), fullPage: true });
+    },
+  },
+  {
+    name: "logs",
+    run: async (page) => {
+      await login(page, ADMIN);
+      await page.goto(`${BASE_URL}/logs`);
+      await page.waitForSelector("text=Herunterladen");
+      await page.waitForTimeout(150);
+      await page.screenshot({ path: path.join(OUT_DIR, "logs.png") });
+    },
+  },
+  {
+    name: "calendar",
+    run: async (page) => {
+      await login(page, ADMIN);
+      await page.goto(`${BASE_URL}/calendar/2026`);
+      await page.waitForSelector("text=Heute");
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: path.join(OUT_DIR, "calendar.png") });
     },
   },
 ];
