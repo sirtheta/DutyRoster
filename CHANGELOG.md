@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.19](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.18...DutyRoster-v0.4.19) (2026-10-14)
+
+
+### Features
+
+* **swaps:** let recipients accept only some of the requested days ([#146](https://github.com/sirtheta/DutyRoster/issues/146)) ([6104fc1](https://github.com/sirtheta/DutyRoster/commit/6104fc1323125a0f3f9c2fa256186d0c3006de14))
+
 ## [0.4.18](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.17...DutyRoster-v0.4.18) (2026-10-14)
 
 
