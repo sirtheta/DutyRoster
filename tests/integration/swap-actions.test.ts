@@ -155,6 +155,57 @@ describe("swap request actions", () => {
     expect(supersededNotification.body).toContain("bereits von jemand anderem angenommen");
   });
 
+  it("partially accepts a single request: only the chosen days move, the rest stay with the requester", async () => {
+    const { prisma } = db;
+    const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com" }) });
+    const target = await prisma.user.create({ data: createTestUser({ email: "target@example.com", role: "Viewer" }) });
+    await seedDutyWeek(owner.id);
+    currentSession = sessionFor(owner.id, "Viewer", "Owner");
+
+    const { createSwapRequestAction, acceptSwapRequestAction } = await import("@/app/(app)/swaps/actions");
+    await createSwapRequestAction({ toUserId: target.id, dates: WEEK });
+    const request = await prisma.swapRequest.findFirstOrThrow();
+
+    currentSession = sessionFor(target.id, "Viewer", "Target");
+    expect((await acceptSwapRequestAction(request.id, ["2030-06-99"])).error).toMatch(/Tagesauswahl/);
+    expect((await acceptSwapRequestAction(request.id, [])).error).toMatch(/Tagesauswahl/);
+    const res = await acceptSwapRequestAction(request.id, [WEEK[1]]);
+    expect(res.error).toBeUndefined();
+
+    const updated = await prisma.swapRequest.findUniqueOrThrow({ where: { id: request.id } });
+    expect(updated.status).toBe("Accepted");
+    expect(JSON.parse(updated.dates)).toEqual([WEEK[1]]);
+    expect((await prisma.entry.findMany({ where: { userId: target.id, type: "S" } })).map((e) => e.date)).toEqual([WEEK[1]]);
+    expect(await prisma.entry.count({ where: { userId: owner.id, type: "S" } })).toBe(WEEK.length - 1);
+  });
+
+  it("partial accept on a broadcast keeps the remaining days open for the others", async () => {
+    const { prisma } = db;
+    const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com" }) });
+    const a = await prisma.user.create({ data: createTestUser({ email: "a@example.com", role: "Viewer" }) });
+    const b = await prisma.user.create({ data: createTestUser({ email: "b@example.com", role: "Viewer" }) });
+    await seedDutyWeek(owner.id);
+    currentSession = sessionFor(owner.id, "Viewer", "Owner");
+
+    const { createSwapRequestAction, acceptSwapRequestAction } = await import("@/app/(app)/swaps/actions");
+    await createSwapRequestAction({ toUserId: null, dates: WEEK });
+    const reqA = await prisma.swapRequest.findFirstOrThrow({ where: { toUserId: a.id } });
+    const reqB = await prisma.swapRequest.findFirstOrThrow({ where: { toUserId: b.id } });
+
+    currentSession = sessionFor(a.id, "Viewer", "A");
+    expect((await acceptSwapRequestAction(reqA.id, [WEEK[0]])).error).toBeUndefined();
+
+    const openB = await prisma.swapRequest.findUniqueOrThrow({ where: { id: reqB.id } });
+    expect(openB.status).toBe("Pending");
+    expect(JSON.parse(openB.dates)).toEqual(WEEK.slice(1));
+
+    // B takes the rest; nothing is left, so no one else is affected and B's request is accepted.
+    currentSession = sessionFor(b.id, "Viewer", "B");
+    expect((await acceptSwapRequestAction(reqB.id)).error).toBeUndefined();
+    expect(await prisma.entry.count({ where: { userId: b.id, type: "S" } })).toBe(WEEK.length - 1);
+    expect(await prisma.entry.count({ where: { userId: owner.id, type: "S" } })).toBe(0);
+  });
+
   it("cancelling one row of a broadcast request withdraws the whole group", async () => {
     const { prisma } = db;
     const owner = await prisma.user.create({ data: createTestUser({ email: "owner@example.com" }) });

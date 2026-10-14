@@ -144,6 +144,7 @@ export default async function DashboardPage({
   const toSwapRow = (r: (typeof pendingSwaps)[number], otherName: string) => ({
     id: r.id,
     otherName,
+    dates: JSON.parse(r.dates) as string[],
     datesLabel: (JSON.parse(r.dates) as string[]).map(formatDateCH).join(", "),
     comment: r.comment,
   });
