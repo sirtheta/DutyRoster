@@ -82,6 +82,11 @@ const shots: Shot[] = [
       await login(page, EDITOR);
       await page.goto(`${BASE_URL}/dashboard`);
       await page.waitForSelector("text=Anfragen"); // the submit button in the "Tausch anfragen" form
+      // Pick a week and keep only its first day ticked to show the single-day selection.
+      await page.click('button[role="combobox"]:has-text("Woche wählen")');
+      await page.locator('[role="option"]').first().click();
+      const boxes = page.locator('input[type="checkbox"]');
+      for (let i = 1; i < (await boxes.count()); i++) await boxes.nth(i).uncheck();
       await page.locator('button:has-text("Anfragen")').last().scrollIntoViewIfNeeded();
       await page.waitForTimeout(150);
       await page.screenshot({ path: path.join(OUT_DIR, "diensttausch.png") });
