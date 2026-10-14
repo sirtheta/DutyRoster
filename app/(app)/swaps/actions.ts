@@ -168,8 +168,16 @@ export async function createSwapRequestAction(rawInput: {
   return {};
 }
 
-/** Accepts an incoming swap request and moves the S-duty entries to the caller. */
-export async function acceptSwapRequestAction(requestId: number): Promise<{ error?: string }> {
+/**
+ * Accepts an incoming swap request and moves the S-duty entries to the caller.
+ * `acceptedDates` limits the takeover to a subset of the requested days (all
+ * days when omitted); the remaining days stay with the requester, and on a
+ * broadcast they remain open for the other colleagues.
+ */
+export async function acceptSwapRequestAction(
+  requestId: number,
+  acceptedDates?: string[]
+): Promise<{ error?: string }> {
   const session = await requireSession();
   const sessionUserId = parseInt(session.user.id, 10);
 
@@ -182,15 +190,20 @@ export async function acceptSwapRequestAction(requestId: number): Promise<{ erro
     return { error: "Keine Berechtigung für diese Anfrage." };
   }
 
-  const dates = JSON.parse(request.dates) as string[];
+  const requestedDates = JSON.parse(request.dates) as string[];
+  const dates = acceptedDates ? [...new Set(acceptedDates)].sort() : requestedDates;
+  if (dates.length === 0 || dates.some((d) => !requestedDates.includes(d))) {
+    return { error: "Ungültige Tagesauswahl." };
+  }
   try {
     await prisma.$transaction(async (tx) => {
       // Guard against a race with a concurrent accept/decline/cancel: only
       // proceeds if the row is still Pending, so two simultaneous accepts
       // (e.g. two colleagues on a broadcast request) can't both go through.
+      // The row is rewritten to the days actually taken over.
       const { count } = await tx.swapRequest.updateMany({
         where: { id: request.id, status: "Pending" },
-        data: { status: "Accepted", decidedAt: new Date() },
+        data: { status: "Accepted", decidedAt: new Date(), dates: JSON.stringify(dates) },
       });
       if (count === 0) {
         throw new Error("Anfrage wurde bereits bearbeitet.");
@@ -233,30 +246,46 @@ export async function acceptSwapRequestAction(requestId: number): Promise<{ erro
     fromUserId: request.fromUserId,
     toUserId: request.toUserId,
     dates,
+    requestedDates,
   });
   await notifyUser(
     request.fromUserId,
     "Sanitätsplaner: Diensttausch bestätigt",
-    `Hallo ${request.fromUser.name}\n\n${request.toUser.name} hat deine Tauschanfrage angenommen und übernimmt: ${formatDates(dates)}.`
+    `Hallo ${request.fromUser.name}\n\n${request.toUser.name} hat deine Tauschanfrage angenommen und übernimmt: ${formatDates(dates)}.` +
+      (dates.length < requestedDates.length
+        ? ` Die übrigen Tage (${formatDates(requestedDates.filter((d) => !dates.includes(d)))}) bleiben bei dir.`
+        : "")
   );
 
-  // If this was part of a broadcast (an "an alle" request), close out the
-  // sibling invitations that are still open — someone else already took it.
+  // If this was part of a broadcast (an "an alle" request), the days taken
+  // over are gone for the other invitees: requests left with no days are
+  // closed, the others shrink to the remaining days and stay open.
   if (request.groupId) {
     const siblings = await prisma.swapRequest.findMany({
       where: { groupId: request.groupId, status: "Pending", id: { not: request.id } },
       include: { toUser: true },
     });
-    if (siblings.length > 0) {
-      await prisma.swapRequest.updateMany({
-        where: { groupId: request.groupId, status: "Pending", id: { not: request.id } },
-        data: { status: "Superseded", decidedAt: new Date() },
-      });
-      for (const sibling of siblings) {
+    for (const sibling of siblings) {
+      const remaining = (JSON.parse(sibling.dates) as string[]).filter((d) => !dates.includes(d));
+      if (remaining.length === 0) {
+        await prisma.swapRequest.updateMany({
+          where: { id: sibling.id, status: "Pending" },
+          data: { status: "Superseded", decidedAt: new Date() },
+        });
         await notifyUser(
           sibling.toUserId,
           "Sanitätsplaner: Diensttausch bereits vergeben",
           `Hallo ${sibling.toUser.name}\n\nDie Tauschanfrage von ${request.fromUser.name} für ${formatDates(dates)} wurde bereits von jemand anderem angenommen.`
+        );
+      } else {
+        await prisma.swapRequest.updateMany({
+          where: { id: sibling.id, status: "Pending" },
+          data: { dates: JSON.stringify(remaining) },
+        });
+        await notifyUser(
+          sibling.toUserId,
+          "Sanitätsplaner: Diensttausch teilweise vergeben",
+          `Hallo ${sibling.toUser.name}\n\nVon der Tauschanfrage von ${request.fromUser.name} wurde ${formatDates(dates)} bereits von jemand anderem übernommen. Noch offen: ${formatDates(remaining)}.`
         );
       }
     }

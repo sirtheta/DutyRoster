@@ -34,6 +34,7 @@ export interface SwapWeekOption {
 export interface SwapRequestRow {
   id: number;
   otherName: string;
+  dates: string[];
   datesLabel: string;
   comment: string | null;
 }
@@ -55,6 +56,8 @@ export function SwapRequestsCard({
   const [colleagueId, setColleagueId] = useState("");
   const [comment, setComment] = useState("");
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  // Per incoming request: the days the recipient has unticked (all ticked by default).
+  const [declinedDays, setDeclinedDays] = useState<Record<number, string[]>>({});
 
   const BROADCAST = "__all__";
 
@@ -126,9 +129,30 @@ export function SwapRequestsCard({
                 key={r.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
               >
-                <div className="text-sm">
-                  <span className="font-medium">{r.otherName}</span> möchte dir Dienste übergeben:{" "}
-                  {r.datesLabel}
+                <div className="space-y-1 text-sm">
+                  <div>
+                    <span className="font-medium">{r.otherName}</span> möchte dir Dienste übergeben:{" "}
+                    {r.datesLabel}
+                  </div>
+                  {r.dates.length > 1 && (
+                    <div className="flex flex-wrap gap-3">
+                      {r.dates.map((d) => (
+                        <label key={d} className="flex items-center gap-1.5 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={!declinedDays[r.id]?.includes(d)}
+                            onChange={(e) =>
+                              setDeclinedDays((prev) => {
+                                const rest = (prev[r.id] ?? []).filter((x) => x !== d);
+                                return { ...prev, [r.id]: e.target.checked ? rest : [...rest, d] };
+                              })
+                            }
+                          />
+                          {formatDateCH(d)}
+                        </label>
+                      ))}
+                    </div>
+                  )}
                   {r.comment && (
                     <p className="whitespace-pre-wrap text-xs text-muted-foreground">«{r.comment}»</p>
                   )}
@@ -136,12 +160,21 @@ export function SwapRequestsCard({
                 <div className="flex gap-2">
                   <Button
                     size="sm"
-                    disabled={isPending}
-                    onClick={() =>
-                      run(() => acceptSwapRequestAction(r.id), "Tausch angenommen — die Dienste wurden übertragen.")
-                    }
+                    disabled={isPending || r.dates.every((d) => declinedDays[r.id]?.includes(d))}
+                    onClick={() => {
+                      const taken = r.dates.filter((d) => !declinedDays[r.id]?.includes(d));
+                      run(
+                        () => acceptSwapRequestAction(r.id, taken),
+                        taken.length < r.dates.length
+                          ? "Tausch teilweise angenommen — die gewählten Dienste wurden übertragen."
+                          : "Tausch angenommen — die Dienste wurden übertragen."
+                      );
+                    }}
                   >
-                    Annehmen
+                    {r.dates.length > 1 &&
+                    r.dates.some((d) => declinedDays[r.id]?.includes(d))
+                      ? "Auswahl annehmen"
+                      : "Annehmen"}
                   </Button>
                   <Button
                     size="sm"

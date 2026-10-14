@@ -85,8 +85,20 @@ const shots: Shot[] = [
       // Pick a week and keep only its first day ticked to show the single-day selection.
       await page.click('button[role="combobox"]:has-text("Woche wählen")');
       await page.locator('[role="option"]').first().click();
-      const boxes = page.locator('input[type="checkbox"]');
+      const boxes = page
+        .locator('h3:has-text("Tausch anfragen")')
+        .locator("xpath=..")
+        .locator('input[type="checkbox"]');
       for (let i = 1; i < (await boxes.count()); i++) await boxes.nth(i).uncheck();
+      // Incoming request: untick the last two days to show the partial accept ("Auswahl annehmen").
+      const incomingBoxes = page
+        .locator('h3:has-text("Eingehende Anfragen")')
+        .locator("xpath=..")
+        .locator('input[type="checkbox"]');
+      const incomingCount = await incomingBoxes.count();
+      for (let i = Math.max(1, incomingCount - 2); i < incomingCount; i++) {
+        await incomingBoxes.nth(i).uncheck();
+      }
       await page.locator('button:has-text("Anfragen")').last().scrollIntoViewIfNeeded();
       await page.waitForTimeout(150);
       await page.screenshot({ path: path.join(OUT_DIR, "diensttausch.png") });
@@ -175,7 +187,7 @@ async function main() {
   }
 
   mkdirSync(OUT_DIR, { recursive: true });
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
 
   for (const shot of selected) {
     // Fresh context per shot so each login starts logged out — /login
