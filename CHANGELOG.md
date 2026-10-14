@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.18](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.17...DutyRoster-v0.4.18) (2026-10-14)
+
+
+### Features
+
+* **swaps:** Allow selecting individual days when creating swap requests ([#144](https://github.com/sirtheta/DutyRoster/issues/144)) ([40a9f0d](https://github.com/sirtheta/DutyRoster/commit/40a9f0d7980ddc0bc8136f77015362620111e4b3))
+
 ## [0.4.17](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.16...DutyRoster-v0.4.17) (2026-09-21)
 
 
