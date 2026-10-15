@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.20](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.19...DutyRoster-v0.4.20) (2026-10-15)
+
+
+### Bug Fixes
+
+* **notifications:** remind at the start of every duty block added after the weekly slot ([#149](https://github.com/sirtheta/DutyRoster/issues/149)) ([8feb05c](https://github.com/sirtheta/DutyRoster/commit/8feb05c531493cc44589012a0b0ca13ab10813f9))
+
 ## [0.4.19](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.18...DutyRoster-v0.4.19) (2026-10-14)
 
 
