@@ -71,7 +71,8 @@ export function startNotificationScheduler(): void {
 /**
  * Finds users with an S-Dienst in the current week. For a single duty, the
  * notification is sent on the actual duty day; weeks with multiple duties
- * keep the configured weekly reminder. Repeated scheduler runs do not
+ * keep the configured weekly reminder, or — if that slot has already passed
+ * by the time the first duty day arrives — a reminder on that first day. Repeated scheduler runs do not
  * produce duplicates.
  */
 export async function queueDueNotifications(
@@ -104,7 +105,15 @@ export async function queueDueNotifications(
     const isSingleDutyDay = sDuties.length === 1 && sDuties[0].date === today;
     const isConfiguredWeeklySlot =
       user.notifyWeekday === weekday && user.notifyHour === hour && user.notifyMinute === minute;
-    if (!force && !isSingleDutyDay && !isConfiguredWeeklySlot) continue;
+    // Duties that arrived after the weekly slot already passed (e.g. a swap
+    // accepted mid-week) would otherwise never be announced: remind on the
+    // first duty day instead, from the user's configured time of day on.
+    const weekMinute = (wd: number, h: number, m: number) => ((wd + 6) % 7) * 1440 + h * 60 + m;
+    const weeklySlotPassed =
+      weekMinute(weekday, hour, minute) > weekMinute(user.notifyWeekday, user.notifyHour, user.notifyMinute);
+    const isFirstDutyDayReminder =
+      sDuties[0].date === today && weeklySlotPassed;
+    if (!force && !isSingleDutyDay && !isConfiguredWeeklySlot && !isFirstDutyDayReminder) continue;
 
     const firstDate = formatDateCH(sDuties[0].date);
     const lastDate = formatDateCH(sDuties[sDuties.length - 1].date);

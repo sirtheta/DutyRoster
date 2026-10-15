@@ -91,6 +91,25 @@ describe("notifications", () => {
     expect(await prisma.pendingNotification.count({ where: { userId: user.id } })).toBe(1);
   });
 
+  it("reminds on the first duty day when duties were added after the weekly slot passed", async () => {
+    const { prisma } = db;
+    const user = await prisma.user.create({
+      data: createTestUser({ notifyEnabled: true, notifyWeekday: 1, notifyHour: 7 }),
+    });
+    // Thursday + Friday, e.g. taken over via swap on Wednesday.
+    for (const date of ["2026-03-05", "2026-03-06"]) {
+      await prisma.entry.create({ data: { userId: user.id, date, type: "S" } });
+    }
+
+    // Before the configured time of day on the first duty day: nothing yet.
+    expect(await queueDueNotifications(prisma, new Date("2026-03-04T12:00:00+01:00"))).toBe(0);
+    expect(await queueDueNotifications(prisma, new Date("2026-03-05T06:55:00+01:00"))).toBe(1);
+    // Not repeated the next day or on a later run.
+    expect(await queueDueNotifications(prisma, new Date("2026-03-05T07:00:00+01:00"))).toBe(0);
+    expect(await queueDueNotifications(prisma, new Date("2026-03-06T07:00:00+01:00"))).toBe(0);
+    expect(await prisma.pendingNotification.count({ where: { userId: user.id } })).toBe(1);
+  });
+
   it("matches notifyWeekday/notifyHour in the app timezone, not the server's", async () => {
     const { prisma } = db;
     const user = await prisma.user.create({
