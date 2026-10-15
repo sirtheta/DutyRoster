@@ -256,6 +256,13 @@ export async function acceptSwapRequestAction(
         ? ` Die übrigen Tage (${formatDates(requestedDates.filter((d) => !dates.includes(d)))}) bleiben bei dir.`
         : "")
   );
+  // The new duty holder gets an immediate confirmation too: the weekly
+  // reminder slot may already have passed, so they'd otherwise hear nothing.
+  await notifyUser(
+    request.toUserId,
+    "Sanitätsplaner: Du hast Dienst übernommen",
+    `Hallo ${request.toUser.name}\n\nDu hast von ${request.fromUser.name} den S-Dienst übernommen: ${formatDates(dates)}.`
+  );
 
   // If this was part of a broadcast (an "an alle" request), the days taken
   // over are gone for the other invitees: requests left with no days are

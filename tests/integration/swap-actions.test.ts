@@ -313,6 +313,10 @@ describe("swap request actions", () => {
     // The requester gets notified about the decision.
     const notification = await prisma.pendingNotification.findFirstOrThrow({ where: { userId: owner.id } });
     expect(notification.subject).toContain("bestätigt");
+
+    // The acceptor is told right away that they now have the duty.
+    const acceptorNotification = await prisma.pendingNotification.findFirstOrThrow({ where: { userId: target.id } });
+    expect(acceptorNotification.subject).toContain("übernommen");
   });
 
   it("accepting fails atomically when the acceptor already has an entry on one day", async () => {
