@@ -71,7 +71,8 @@ export function startNotificationScheduler(): void {
 /**
  * Finds users with an S-Dienst in the current week. For a single duty, the
  * notification is sent on the actual duty day; weeks with multiple duties
- * keep the configured weekly reminder. Repeated scheduler runs do not
+ * keep the configured weekly reminder, or — if that slot has already passed
+ * by the time the first duty day arrives — a reminder on that first day. Repeated scheduler runs do not
  * produce duplicates.
  */
 export async function queueDueNotifications(
@@ -104,22 +105,42 @@ export async function queueDueNotifications(
     const isSingleDutyDay = sDuties.length === 1 && sDuties[0].date === today;
     const isConfiguredWeeklySlot =
       user.notifyWeekday === weekday && user.notifyHour === hour && user.notifyMinute === minute;
-    if (!force && !isSingleDutyDay && !isConfiguredWeeklySlot) continue;
+    // Duties that arrived after the weekly slot already passed (e.g. a swap
+    // accepted mid-week) would otherwise never be announced: remind on the
+    // first day of each run of consecutive duty days instead, from the user's
+    // configured time of day on.
+    const weekMinute = (wd: number, h: number, m: number) => ((wd + 6) % 7) * 1440 + h * 60 + m;
+    const weeklySlotPassed =
+      weekMinute(weekday, hour, minute) > weekMinute(user.notifyWeekday, user.notifyHour, user.notifyMinute);
+    const todayBlock = weeklySlotPassed
+      ? dutyBlocks(sDuties.map((d) => d.date)).find((b) => b[0] === today)
+      : undefined;
+    const useBlock = !force && !isSingleDutyDay && !isConfiguredWeeklySlot && !!todayBlock;
+    if (!force && !isSingleDutyDay && !isConfiguredWeeklySlot && !useBlock) continue;
 
-    const firstDate = formatDateCH(sDuties[0].date);
-    const lastDate = formatDateCH(sDuties[sDuties.length - 1].date);
+    const dutyDates = useBlock ? todayBlock! : sDuties.map((d) => d.date);
+    const firstDate = formatDateCH(dutyDates[0]);
+    const lastDate = formatDateCH(dutyDates[dutyDates.length - 1]);
     const dateRange = firstDate === lastDate ? `am ${firstDate}` : `von ${firstDate} bis ${lastDate}`;
     const subject =
-      sDuties.length === 1
+      dutyDates.length === 1
         ? `Sanitätsplaner: Dein S-Dienst am ${firstDate}`
-        : `Sanitätsplaner: Dein S-Dienst diese Woche`;
+        : dutyDates.length === sDuties.length
+          ? `Sanitätsplaner: Dein S-Dienst diese Woche`
+          : `Sanitätsplaner: Dein S-Dienst ${dateRange}`;
 
     if (!force) {
+      const weekStart = new Date(`${start}T00:00:00`);
       const alreadyQueued = await prisma.pendingNotification.findFirst({
         where: {
           userId: user.id,
-          subject,
-          createdAt: { gte: new Date(`${start}T00:00:00`) },
+          createdAt: { gte: weekStart },
+          // The first duty block is already covered by any S-Dienst reminder
+          // sent this week (e.g. the weekly one just before); later blocks
+          // only dedupe against their own reminder.
+          ...(useBlock && todayBlock![0] === sDuties[0].date
+            ? { subject: { startsWith: "Sanitätsplaner: Dein S-Dienst" } }
+            : { subject }),
         },
       });
       if (alreadyQueued) continue;
@@ -137,6 +158,19 @@ export async function queueDueNotifications(
     queued++;
   }
   return queued;
+}
+
+/** Splits sorted YYYY-MM-DD dates into runs of consecutive days. */
+function dutyBlocks(dates: string[]): string[][] {
+  const blocks: string[][] = [];
+  for (const date of dates) {
+    const last = blocks[blocks.length - 1];
+    const prev = last?.[last.length - 1];
+    const gapDays = prev ? (parseDate(date)!.getTime() - parseDate(prev)!.getTime()) / 86_400_000 : Infinity;
+    if (gapDays <= 1.5) last.push(date);
+    else blocks.push([date]);
+  }
+  return blocks;
 }
 
 const COVERAGE_ALERT_SUBJECT = "Sanitätsplaner: Ungedeckte Diensttage";
