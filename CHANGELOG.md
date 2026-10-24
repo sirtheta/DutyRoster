@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.21](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.20...DutyRoster-v0.4.21) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** upgrade Next.js to 16.4.3 for October 2026 security fixes ([#154](https://github.com/sirtheta/DutyRoster/issues/154)) ([5279c91](https://github.com/sirtheta/DutyRoster/commit/5279c91811b6f1da6328c1905b5528922bc964bf))
+
 ## [0.4.20](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.19...DutyRoster-v0.4.20) (2026-10-15)
 
 
