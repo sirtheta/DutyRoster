@@ -1,149 +1,95 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**Always use the `caveman` skill** (invoke via Skill tool at start of each conversation/task).
 
-**Always use the `caveman` skill** for all responses in this repository (invoke it via the Skill tool at the start of each conversation/task).
+## Overview
 
-## Repository Overview
+Duty-roster / vacation planner ("Sanitätsplaner") for a Swiss company first-aid team. Next.js 16 (App Router), TypeScript, React 19, Tailwind 4, Prisma + SQLite. UI, user text and docs are **German**.
 
-This is a duty-roster / vacation planner ("Sanitätsplaner") built for a Swiss first-aid team for a company, implemented as a Next.js 16 web dashboard (TypeScript, React 19, Tailwind CSS 4, Prisma + SQLite).
+End-user manual (Admin/Editor, screenshots): `public/benutzerhandbuch.html` (served at `/benutzerhandbuch.html`). Documents behavior, not implementation. After significant UI changes regenerate its screenshots; don't hand-edit stale ones.
 
-The UI, user-facing text, and documentation are **in German**.
+**Next.js 16 has breaking changes** — before touching routing, middleware or data fetching, check `node_modules/next/dist/docs/`; don't assume older-Next behavior.
 
-A full illustrated end-user manual (Admin and Editor, with screenshots) lives at `public/benutzerhandbuch.html` — open it in a browser, or in the running app at `/benutzerhandbuch.html`. It documents app behavior for end users, not implementation details; regenerate its screenshots after significant UI changes rather than hand-editing stale ones.
-
----
-
-## Web Application (repo root)
-
-### Commands
+## Commands
 
 ```bash
-# Development
-npm run dev            # Start dev server at localhost:3000
-npm run build          # Production build
-npm run lint           # ESLint check
-
-# Database
-npx prisma migrate dev --name <name>   # Create and apply a new migration
-npx prisma studio                       # GUI to inspect the DB
-npm run db:seed                         # Seed with faker data (dev only)
-
-# Tests
-npm test               # Run all tests (Vitest)
-npm run test:watch     # Watch mode
-npm run test:coverage  # Coverage report (v8)
-npm run test:integration  # Integration tests only
-npm run test:e2e       # Playwright E2E tests (starts its own dev server on :3111)
-# Run a single test file:
-npx vitest run tests/unit/rotation.test.ts
+npm run dev                # dev server :3000
+npm run build              # prod build
+npm run lint               # ESLint
+npx prisma migrate dev --name <name>   # new migration (also run after pulling schema changes)
+npx prisma studio
+npm run db:seed            # faker data, dev only
+npm test                   # Vitest, all
+npm run test:watch
+npm run test:coverage      # v8
+npm run test:integration
+npm run test:e2e           # Playwright, own dev server on :3111
+npx vitest run tests/unit/rotation.test.ts   # single file
 ```
 
-> **Note:** `prisma generate` runs automatically via `postinstall`. After pulling schema changes, run `npx prisma migrate dev` to keep the local DB in sync.
+`prisma generate` runs on `postinstall`.
 
-### Architecture
+## Architecture
 
-**Next.js App Router layout:**
+- `app/(auth)/` public (login, forgot/reset password). `app/(app)/` protected, session required: `calendar/[year]/` (main planner grid), `dashboard/`, `holidays/` (canton holidays via `date-holidays`), `settings/` (SMTP, Telegram, rotation, system), `users/` (roles, rotation order, notify prefs), `swaps/`, `audit/`, `logs/`.
+- Mutations = Server Actions in co-located `actions.ts`. API routes only for external/streaming: `/api/ical/[token]`, `/api/plan/[year]/export`, `/api/calendar/[year]/stream`, `/api/logs/[filename]`, NextAuth.
+- `lib/` shared server utils. `prisma/schema.prisma` = data model source of truth.
 
-- `app/(auth)/` — Public routes (login)
-- `app/(app)/` — Protected routes; all require an active session
-  - `calendar/[year]/` — The main planner grid: per-user duty/absence entries for a given year
-  - `dashboard/` — Overview page
-  - `holidays/` — Canton holiday management (seeded via `date-holidays`)
-  - `settings/` — SMTP, Telegram, rotation, and system-wide config
-  - `users/` — User management (roles, rotation order, notification preferences)
-- `app/api/` — REST endpoints (iCal feed, plan export, NextAuth handlers)
-- `lib/` — Shared server-side utilities (auth, rotation, notifications, audit, permissions)
-- `prisma/schema.prisma` — Single source of truth for the data model
+**Auth** (`lib/auth.ts`): NextAuth v5 Credentials + bcrypt. Constant-time login (`dummyCompare`) hides user existence. In-memory login rate limit (`lib/rate-limit.ts`). JWT sessions, 7d (`lib/config.ts`). `role` (`Admin | Editor | Viewer`) in JWT → `session.user.role`. Password reset (`lib/password-reset.ts`): emailed single-use link, SHA-256 hash stored, 1h TTL, generic responses (no enumeration), rate-limited per email + IP.
 
-**Data mutations** use Next.js Server Actions (`actions.ts` files co-located with routes), not API routes. API routes are reserved for external-facing/streaming endpoints (`/api/ical/[token]`, `/api/plan/[year]/export`, NextAuth).
+**Authz** (`lib/permissions.ts`): `requireRole(roles)` / `requireAdmin()` / `requireEditor()` / `requireSession()` at top of Server Components/Actions (redirect to `/login` or `/calendar`). `hasRole(session, roles)` sync check for UI.
 
-**Authentication** (`lib/auth.ts`):
-- NextAuth v5 Credentials provider with bcrypt password validation
-- Constant-time login response (`dummyCompare`) so a bad email doesn't reveal user existence via timing
-- In-memory rate limiting on login attempts (`lib/rate-limit.ts`)
-- JWT sessions, 7-day max age (configurable via `lib/config.ts`)
-- `user.role` (`Admin | Editor | Viewer`) is embedded in the JWT and carried into `session.user.role`
-- Self-service password reset (`lib/password-reset.ts`, `app/(auth)/forgot-password` + `reset-password`): emailed single-use link (SHA-256 hash stored, 1h TTL), generic responses to prevent account enumeration, rate-limited per email and IP
+**Rotation** (`lib/rotation.ts`): `runRotation()` pure fn. Input: year, active users sorted by `rotationOrder`, holidays, per-user blocked/occupied dates. Assigns Mon–Fri weeks via queue → `{ assignments, uncoveredWeeks }`. Front user blocked → next available takes week, blocked user keeps place (gets following week). Week uncovered only if *every* user blocked. Weeks already covered by S-duty and fully-holiday weeks skipped without consuming a turn.
 
-**Authorization** (`lib/permissions.ts`):
-- `requireRole(roles)` / `requireAdmin()` / `requireEditor()` / `requireSession()` — call at the top of Server Components or Server Actions that need role gating; redirects to `/login` or `/calendar` on failure
-- `hasRole(session, roles)` — synchronous check for UI rendering
+**EntryType** (schema): `S` Sanität/duty, `F` Ferien, `G` geschäftliche Absenz, `C` Kompensieren, `M` Militär, `K` Kurzarbeit, `TZ` Teilzeit, `A` Ausbildung, `H` Homeoffice. Labels/colors + `AUTOMATION_BLOCKED` (types blocking automation) in `lib/entry-types.ts`.
 
-**Duty rotation** (`lib/rotation.ts`):
-- `runRotation()` is a pure function: given a year, active users (sorted by `rotationOrder`), holidays, and each user's already-blocked/occupied dates, it assigns Mon–Fri work weeks via a rotation queue and returns `{ assignments, uncoveredWeeks }`
-- If the user at the front of the queue is blocked that week, the next available user takes it and the blocked user keeps their place (gets the following week); a week is only reported uncovered when *every* user is blocked. Weeks already covered by someone's S-duty and fully-holiday weeks are skipped without consuming a turn
-- `EntryType` (`prisma/schema.prisma`): `S` (Sanität/duty), `F` (Ferien), `G` (geschäftliche Absenz), `C` (Kompensieren), `M` (Militär), `K` (Kurzarbeit), `TZ` (Teilzeit), `A` (Ausbildung), `H` (Homeoffice) — labels/colors in `lib/entry-types.ts`, and `AUTOMATION_BLOCKED` defines which types make a user unavailable for the automation
+**Notifications** (`lib/notifications.ts`): `node-cron` job `startNotificationScheduler` (`NOTIFY_CRON_SCHEDULE`, default every 5 min) matches each active user's weekday/hour/minute (5-min steps) in `NOTIFY_TIMEZONE` (not server TZ); if user has S-duty that week, queues `PendingNotification`, sent via email (`lib/email.ts`) or Telegram (`lib/telegram.ts`) per `user.notifyChannel`. Failed sends retried up to `NOTIFY_MAX_ATTEMPTS`, then shown on settings page with manual retry. Old notification/audit rows pruned per `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS`.
 
-**Notifications** (`lib/notifications.ts`): A `node-cron` job (`startNotificationScheduler`, schedule from `NOTIFY_CRON_SCHEDULE`, default every 5 minutes) matches each active user's configured weekday/hour/minute (5-minute steps) — evaluated in the app timezone (`NOTIFY_TIMEZONE`, default `Europe/Zurich`, independent of the server's TZ) — queues a `PendingNotification` if they have an S-Dienst that week, then dispatches via email (`lib/email.ts`) or Telegram (`lib/telegram.ts`) per `user.notifyChannel`. Failed sends are retried up to `NOTIFY_MAX_ATTEMPTS` times (then surfaced on the settings page with a manual retry), and old notification/audit rows are pruned per `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS`.
+**Swaps** (`app/(app)/swaps/actions.ts`, `SwapRequest`): any user (incl. Viewer) offers own upcoming S-week from dashboard to one colleague or broadcast to all active colleagues (one row per colleague, shared `groupId`). First accept gets duties atomically (`source: Swap`); other rows → `Superseded` (those colleagues notified). Colleague(s) or Admin accept/decline. All decisions notified via `PendingNotification` and audit-logged.
 
-**Duty swaps** (`app/(app)/swaps/actions.ts`, `SwapRequest` model): Any user (incl. Viewer) can offer their own upcoming S-duty week to a single colleague, or broadcast it to every active colleague at once, from the dashboard. A broadcast creates one `SwapRequest` row per colleague, linked by `groupId`; whoever accepts first gets the duties atomically (`source: Swap`) and the remaining rows are auto-marked `Superseded` (and those colleagues notified). The colleague(s) (or an Admin) accept or decline; all decisions are notified via the `PendingNotification` queue and audit-logged.
+**Encrypted settings**: SMTP password + Telegram bot token AES-encrypted in `SystemSettings` (`lib/crypto.ts`, `ENCRYPTION_KEY`).
 
-**Encrypted settings**: SMTP password and Telegram bot token are AES-encrypted at rest in `SystemSettings` via `lib/crypto.ts`, using the `ENCRYPTION_KEY` env var.
+**iCal** (`app/api/ical/[token]/route.ts`): per-user token (`User.icalToken`, 32 random bytes, rotatable on dashboard), no session. Feeds `F` + `S` entries. Failed token lookups rate-limited per IP.
 
-**iCal feed** (`app/api/ical/[token]/route.ts`): Per-user, token-authenticated (`User.icalToken`, 32 random bytes, rotatable from the dashboard) `.ics` feed of `F` and `S` entries — no session required, just the token. Failed token lookups are rate-limited per IP.
+**Audit** (`lib/audit.ts`): `logAudit(session, action, entityType, entityId, details)` → `AuditLog`. Failures logged, never thrown.
 
-**Audit logging** (`lib/audit.ts`): `logAudit(session, action, entityType, entityId, details)` writes to `AuditLog`; failures are logged but never thrown, so a broken audit trail never blocks the underlying mutation.
+**Backups** (`lib/backup.ts`): nightly cron (`BACKUP_CRON_SCHEDULE`) `VACUUM INTO` snapshot to `backups/` beside DB file, one per day, `BACKUP_MAX_KEEP_DAYS` retention. In Docker lives in data volume, so syncing `./data` includes backups.
 
-**Backups** (`lib/backup.ts`): A nightly cron job (`BACKUP_CRON_SCHEDULE`, default 02:30 app time) writes a consistent SQLite snapshot via `VACUUM INTO` to `backups/` next to the database file (one file per day, `BACKUP_MAX_KEEP_DAYS` retention, default 14; `DISABLE_BACKUP=true` turns it off). In Docker that directory lives inside the data volume, so external syncs of `./data` include the backups.
+**Logs** (`lib/log-capture.ts`, `lib/logs.ts`): `startLogCapture()` tees `process.stdout`/`stderr` to `logs/app.log` in data volume (= everything `docker logs` shows). **Must be first call in `instrumentation.ts` `register()`, and `lib/log-capture.ts` must not import `lib/logger`.** Reason: pino writes straight to fd 1/2 via `SonicBoom`, bypassing `process.stdout.write`, unless those were reassigned before first `pino()` call (`hasBeenTampered`). Importing `lib/logs` or anything importing `lib/logger` earlier silently breaks capture (empty downloaded file). Nightly job copy-truncates `app.log` → `app-<date>.log` (rename would leave open stream writing into renamed file), prunes past `LOG_MAX_KEEP_DAYS`. Admin download at `/logs` via `GET /api/logs/[filename]`; filename validated against exact `app.log` / `app-YYYY-MM-DD.log` before FS access.
 
-**Logs** (`lib/log-capture.ts`, `lib/logs.ts`): `startLogCapture()` tees `process.stdout`/`process.stderr` to `logs/app.log` in the data volume, so a file ends up with everything `docker logs` would show — not just what happens to go through the shared pino logger. It lives in its own `lib/log-capture.ts`, with no import of `lib/logger`, and `instrumentation.ts` calls it as the very first thing in `register()`: pino writes straight to file descriptor 1/2 via a `SonicBoom`, bypassing `process.stdout`/`stderr.write` entirely, *unless* those methods were already reassigned before the first `pino()` call anywhere in the process (`hasBeenTampered`) — importing `lib/logs` (or anything else that imports `lib/logger`) before `startLogCapture()` runs silently breaks capture, with nothing but an empty downloaded file to show for it. A nightly job copy-truncates `app.log` to `app-<date>.log` (rename would leave the already-open write stream writing into the renamed file) and prunes files older than `LOG_MAX_KEEP_DAYS` (default 14; `DISABLE_LOG_ROTATION=true` turns rotation off). Admins download files from `/logs` in the UI (`GET /api/logs/[filename]`, filename validated against the exact `app.log` / `app-YYYY-MM-DD.log` shape before touching the filesystem).
+**Time** (`lib/app-time.ts`): `APP_TIMEZONE` (env → `TZ` → `Europe/Zurich`) decides server-side calendar days + rendered times: `todayString()`/`dayOf()`, `currentYear()`/`yearOf()`, `appDayStart()` (UTC instant local day starts, for filtering UTC columns), `formatDateTime()`. Storage stays UTC. **Server code must not use bare `new Date().getFullYear()` or `toDateString(new Date())`** — on UTC host rolls over before Swiss midnight. Client components exempt (browser TZ). Backup/log-rotation crons + their filenames use same zone. pino `zonedTimestamp` = ISO-8601 with UTC offset (DST-safe).
 
-**Time** (`lib/app-time.ts`): `APP_TIMEZONE` (from the env var of that name → `TZ` → `Europe/Zurich`) is the one timezone the server side decides calendar days in and renders times in — `todayString()`/`dayOf()`, `currentYear()`/`yearOf()`, `appDayStart()` (the UTC instant a local day begins at, for filtering UTC-stored columns) and `formatDateTime()`. Timestamps stay stored in UTC everywhere (Prisma/SQLite); only presentation and day boundaries are zoned. Server-side code must not use bare `new Date().getFullYear()` or `toDateString(new Date())` — on a UTC host those roll over an hour or two before Swiss midnight, so "today", "this week" and "the current year" go wrong for evening users. Client components are exempt: they legitimately follow the browser's timezone. The nightly backup/log-rotation crons and the day their filenames are named after run in the same zone, and pino stamps each line with `zonedTimestamp` — ISO-8601 *with* the UTC offset, so it stays unambiguous across the DST change.
+**Prod startup** (`scripts/startup.js`, Docker): applies pending Prisma migrations via `better-sqlite3` (no Prisma CLI in image), seeds first Admin from env, ensures `SystemSettings` row, then starts Next.
 
-**Production startup** (`scripts/startup.js`): In the Docker image, this script applies pending Prisma migrations directly via `better-sqlite3` (no Prisma CLI in the image), seeds the first Admin user from env vars, and ensures a `SystemSettings` row exists before the Next.js server starts.
+## Env vars
 
-### Key Environment Variables
+Full list incl. session/rate-limit/logging overrides: `.env.example`.
 
-| Variable | Required | Description |
-|---|---|---|
-| `DATABASE_URL` | No | SQLite path, defaults to `file:./data/DutyRoster.db` |
-| `AUTH_SECRET` | Production only | NextAuth JWT signing key (min 32 chars); in Docker auto-generated on first start and persisted in the data volume if unset |
-| `AUTH_URL` | Production only | Full URL for auth redirects |
-| `ENCRYPTION_KEY` | Production only | 32-byte hex key for encrypting SMTP/Telegram secrets at rest; in Docker auto-generated on first start and persisted in the data volume if unset |
-| `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_PASSWORD` | First run | Bootstraps the initial admin user |
-| `ADMIN_PASSWORD_HASH` | First run | Pre-hashed bcrypt alternative to `ADMIN_PASSWORD` |
-| `DEFAULT_CANTON` | No | ISO canton code for `date-holidays` seeding, defaults to `BE` |
-| `NOTIFY_CRON_SCHEDULE` | No | Cron expression for the due-notification check, defaults to `*/5 * * * *` |
-| `APP_TIMEZONE` | No | IANA timezone the app displays and logs times in, falls back to `TZ`, then `Europe/Zurich` |
-| `NOTIFY_TIMEZONE` | No | IANA timezone for users' notification weekday/hour, defaults to `APP_TIMEZONE` |
-| `NOTIFY_MAX_ATTEMPTS` | No | Delivery attempts per notification before giving up, defaults to `3` |
-| `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS` | No | Days to keep notification / audit rows (`0` = forever), default `90` / `365` |
-| `BACKUP_CRON_SCHEDULE` / `BACKUP_MAX_KEEP_DAYS` | No | Nightly DB backup schedule (default `30 2 * * *`) and retention in days (default `14`, `0` = keep all) |
-| `LOG_ROTATE_CRON_SCHEDULE` / `LOG_MAX_KEEP_DAYS` | No | Nightly log rotation schedule (default `35 2 * * *`) and retention in days (default `14`, `0` = keep all) |
-| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` / `DISABLE_BACKUP` / `DISABLE_LOG_ROTATION` | No | Dev/staging switches to suppress outgoing notifications / backups / log rotation |
+| Var | Notes |
+|---|---|
+| `DATABASE_URL` | default `file:./data/DutyRoster.db` |
+| `AUTH_SECRET` | prod; ≥32 chars; Docker auto-generates + persists in volume if unset |
+| `AUTH_URL` | prod; full URL for auth redirects |
+| `ENCRYPTION_KEY` | prod; 32-byte hex; Docker auto-generates + persists if unset |
+| `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_PASSWORD` (or `ADMIN_PASSWORD_HASH`) | first run, bootstrap admin |
+| `DEFAULT_CANTON` | holiday seeding, default `BE` |
+| `NOTIFY_CRON_SCHEDULE` | default `*/5 * * * *` |
+| `APP_TIMEZONE` | → `TZ` → `Europe/Zurich` |
+| `NOTIFY_TIMEZONE` | default `APP_TIMEZONE` |
+| `NOTIFY_MAX_ATTEMPTS` | default `3` |
+| `NOTIFY_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS` | default `90` / `365`, `0` = forever |
+| `BACKUP_CRON_SCHEDULE` / `BACKUP_MAX_KEEP_DAYS` | default `30 2 * * *` / `14`, `0` = keep all |
+| `LOG_ROTATE_CRON_SCHEDULE` / `LOG_MAX_KEEP_DAYS` | default `35 2 * * *` / `14`, `0` = keep all |
+| `DISABLE_EMAIL` / `DISABLE_TELEGRAM` / `DISABLE_BACKUP` / `DISABLE_LOG_ROTATION` | dev/staging switches |
 
-See `.env.example` for the full list, including session/rate-limit/logging overrides.
+## Testing
 
-### Testing
+`tests/unit/`, `tests/integration/` (in-memory/temp SQLite, `tests/setup.ts`). Coverage only `lib/**/*.ts` + `app/api/**/*.ts`. E2E `tests/e2e/`: dev server :3111, freshly seeded DB (`tests/e2e/global-setup.ts`, admin `admin@e2e.local`); CI `e2e` job runs `npx playwright install chromium` first.
 
-Tests live in `tests/unit/` and `tests/integration/`. Integration tests use an in-memory or temp SQLite database (configured in `tests/setup.ts`). Coverage is collected only for `lib/**/*.ts` and `app/api/**/*.ts`.
+## Commits
 
-Playwright E2E smoke tests live in `tests/e2e/` (`npm run test:e2e`): the config boots a dev server on port 3111 against a freshly seeded SQLite DB (`tests/e2e/global-setup.ts`, admin login `admin@e2e.local`). CI runs them in the `e2e` job (`npx playwright install chromium` first).
-
----
-
-## Commit Conventions
-
-All commit messages must be **in English** and follow the [Conventional Commits](https://www.conventionalcommits.org/) spec, which `release-please` uses to determine version bumps and generate changelogs:
-
-- `feat: <description>` — new feature — minor version bump
-- `fix: <description>` — bug fix — patch version bump
-- `feat!:` / `fix!:` or `BREAKING CHANGE:` footer — breaking change — major version bump
-- `chore:`, `docs:`, `test:`, `refactor:`, `build:`, `ci:` — no release triggered
-
-The scope is optional but encouraged, e.g. `feat(rotation): skip fully-holiday weeks`.
-
----
+English, Conventional Commits (drives `release-please`): `feat:` minor, `fix:` patch, `feat!:`/`fix!:`/`BREAKING CHANGE:` major; `chore:`/`docs:`/`test:`/`refactor:`/`build:`/`ci:` no release. Scope encouraged, e.g. `feat(rotation): skip fully-holiday weeks`.
 
 ## CI/CD
 
-The **`web.yml`** GitHub Actions workflow triggers on pushes/PRs to `main` (ignoring doc-only changes). It runs ESLint, then Vitest with coverage, then a production build. On push to `main`, `release-please` opens/updates a release PR (tags as `DutyRoster-v<version>`); once a release is created (or on manual `workflow_dispatch`), the job builds and pushes a Docker image to `ghcr.io/sirtheta/duty-roster` (ARM64 target).
-
-Versioning is managed by `release-please` (config: `release-please-config.json`, manifest: `.release-please-manifest.json`).
-
----
-
-## Next.js Version Note
-
-This project uses **Next.js 16**, which has breaking changes from earlier versions. Before modifying routing, middleware, or data-fetching patterns, check `node_modules/next/dist/docs/` for current API conventions — do not assume behavior from older Next.js knowledge.
+`web.yml`: push/PR to `main` (ignores doc-only) → ESLint, Vitest + coverage, prod build. Push to `main` → `release-please` release PR (tag `DutyRoster-v<version>`; config `release-please-config.json`, `.release-please-manifest.json`). On release or `workflow_dispatch` → Docker image to `ghcr.io/sirtheta/duty-roster` (ARM64).
