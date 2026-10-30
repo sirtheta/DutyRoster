@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.21...DutyRoster-v1.0.0) (2026-10-28)
+
+
+### Miscellaneous Chores
+
+* release 1.0.0 ([9a0bbd0](https://github.com/sirtheta/DutyRoster/commit/9a0bbd03960798dcabe304422347d583947de349))
+
 ## [0.4.21](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.20...DutyRoster-v0.4.21) (2026-10-24)
 
 
