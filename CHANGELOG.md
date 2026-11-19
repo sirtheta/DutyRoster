@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v1.0.0...DutyRoster-v1.0.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **auth:** renew session cookie while the app is in use ([#178](https://github.com/sirtheta/DutyRoster/issues/178)) ([48eddd8](https://github.com/sirtheta/DutyRoster/commit/48eddd8f8f979627a68f9ffdbc004e14a42e7f1b))
+
 ## [1.0.0](https://github.com/sirtheta/DutyRoster/compare/DutyRoster-v0.4.21...DutyRoster-v1.0.0) (2026-10-28)
 
 
